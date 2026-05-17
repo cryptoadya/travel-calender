@@ -3,6 +3,10 @@ import { T } from './locales/translations';
 import { APP_VER } from './constants/config';
 import { Ctr, Spin } from './components/ui/Feedback';
 
+import { auth, db } from './lib/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+
 import { AuthPage } from './pages/AuthPage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { CalendarApp } from './pages/CalendarApp';
@@ -22,33 +26,36 @@ export default function App() {
   };
 
   useEffect(() => {
-    (async () => {
-      try {
-        const r = await window.storage.get("session");
-        if (r) setUser(JSON.parse(r.value));
-      } catch (e) { }
+    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        try {
+          const d = await getDoc(doc(db, "users", fbUser.uid));
+          if (d.exists()) {
+            setUser({ ...d.data(), id: fbUser.uid });
+          } else {
+            setUser(null);
+          }
+        } catch (e) {
+          console.error(e);
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
       setLoading(false);
-    })();
+    });
+    return unsub;
   }, []);
 
   const clearAll = async () => {
-    try {
-      const ks = await window.storage.list("", true);
-      if (ks?.keys) {
-        for (const k of ks.keys) {
-          try { await window.storage.delete(k, true); } catch (e) { }
-        }
-      }
-    } catch (e) { }
-    try { await window.storage.delete("session"); } catch (e) { }
-    try { await window.storage.set("tc-ver", APP_VER, true); } catch (e) { }
+    localStorage.clear();
+    try { await window.storage.set("tc-ver", APP_VER); } catch (e) { }
     setUser(null);
     notify(t.clearOK);
   };
 
   const logout = async () => {
-    try { await window.storage.delete("session"); } catch (e) { }
-    setUser(null);
+    await signOut(auth);
     setViewEmp(null);
   };
 

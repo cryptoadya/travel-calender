@@ -6,6 +6,9 @@ import { PBTN, SBTN } from '../ui/Buttons';
 import { transferLabel } from '../../utils/formatUtils';
 import { DH_COMPANIES, TRANSFER_TYPES } from '../../constants/config';
 
+import { db } from '../../lib/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
+
 export function EditEmpModal({ emp, lang, t, onSaved, onClose }) {
   const [fn, setFn] = useState(emp.firstName || "");
   const [ln, setLn] = useState(emp.lastName || "");
@@ -17,13 +20,22 @@ export function EditEmpModal({ emp, lang, t, onSaved, onClose }) {
   const [hsent, setHsent] = useState(emp.hostEntity || "");
   
   const save = async () => {
-    let users = [];
-    try { const r = await window.storage.get("all-users", true); if (r) users = JSON.parse(r.value); } catch (e) { }
     try {
-      await window.storage.set("all-users", JSON.stringify(users.map(u => u.id === emp.id ? { ...u, firstName: fn, lastName: ln, company: co, transferType: tt, homeCountry: hco, hostCountry: hstco, homeEntity: tt === "assignment" ? hent : "", hostEntity: tt === "assignment" ? hsent : "" } : u)), true);
+      await updateDoc(doc(db, "users", emp.id), {
+        firstName: fn,
+        lastName: ln,
+        company: co,
+        transferType: tt,
+        homeCountry: hco,
+        hostCountry: hstco,
+        homeEntity: tt === "assignment" ? hent : "",
+        hostEntity: tt === "assignment" ? hsent : ""
+      });
       onSaved();
       onClose();
-    } catch (e) { }
+    } catch (e) {
+      console.error(e);
+    }
   };
   
   return (

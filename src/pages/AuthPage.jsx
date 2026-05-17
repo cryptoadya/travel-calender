@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { C } from '../constants/colors';
 import { APP_VER, ADM_CODE } from '../constants/config';
-import { hashPw, valPw, genCode } from '../utils/authUtils';
+import { valPw } from '../utils/authUtils';
 import { DHLogoLogin } from '../components/ui/Layout';
 import { INP, FGRP, FLbl } from '../components/ui/Inputs';
 import { PBTN, SBTN, PWTOG, LINKGRAY, LINKRED } from '../components/ui/Buttons';
 import { ErrBox } from '../components/ui/Feedback';
 import { dName } from '../utils/formatUtils';
 
-export function AuthPage({ lang, setLang, t, setUser, notify, clearAll }) {
+import { auth, db } from '../lib/firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { doc, setDoc, getDocs, collection, query, where, deleteDoc } from 'firebase/firestore';
+
+export function AuthPage({ lang, setLang, t, notify, clearAll }) {
   const [authMode, setAuthMode] = useState("login");
-  const [frm, setFrm] = useState({ name: "", email: "", pw: "", pw2: "", role: "employee", adminCode: "", resetCode: "", newPw: "", newPw2: "", inviteCode: "" });
+  const [frm, setFrm] = useState({ name: "", email: "", pw: "", pw2: "", role: "employee", adminCode: "", inviteCode: "" });
   const [err, setErr] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [resetState, setResetState] = useState({ email: "", code: "", userId: "" });
-  const [legacyUser, setLegacyUser] = useState(null);
   const [activatingEmp, setActivatingEmp] = useState(null);
 
   const f = (k, v) => setFrm(x => ({ ...x, [k]: v }));
@@ -22,40 +24,26 @@ export function AuthPage({ lang, setLang, t, setUser, notify, clearAll }) {
   const doLogin = async () => {
     setErr("");
     const email = frm.email.trim().toLowerCase();
-    let users = [];
-    try { const r = await window.storage.get("all-users", true); if (r) users = JSON.parse(r.value); } catch (e) { }
 
     if (authMode === "register") {
       if (!frm.name.trim()) { setErr(t.name + " " + (lang === "de" ? "erforderlich" : "required")); return; }
-      if (users.find(u => u.email === email)) { setErr(t.eExists); return; }
       const pe = valPw(frm.pw, lang);
       if (pe.length) { setErr(`${t.pwWeak}: ${pe.join(", ")}`); return; }
       if (frm.pw !== frm.pw2) { setErr(t.pwMismatch); return; }
       if (frm.role === "admin" && frm.adminCode !== ADM_CODE) { setErr(t.wrongCode); return; }
       try {
-        const hash = await hashPw(frm.pw);
-        const nu = { id: Date.now().toString(), name: frm.name.trim(), email, role: frm.role, status: "active", reg: new Date().toISOString() };
-        users.push(nu);
-        await window.storage.set("all-users", JSON.stringify(users), true);
-        await window.storage.set(`pw-${nu.id}`, hash, true);
-        await window.storage.set("session", JSON.stringify(nu));
-        setUser(nu);
+        const cred = await createUserWithEmailAndPassword(auth, email, frm.pw);
+        const nu = { name: frm.name.trim(), email, role: frm.role, status: "active", reg: new Date().toISOString() };
+        await setDoc(doc(db, "users", cred.user.uid), nu);
       } catch (e) {
-        setErr(lang === "de" ? "Registrierung fehlgeschlagen" : "Registration failed");
+        if (e.code === 'auth/email-already-in-use') setErr(t.eExists);
+        else setErr(e.message || (lang === "de" ? "Registrierung fehlgeschlagen" : "Registration failed"));
       }
     } else {
-      const found = users.find(u => u.email === email);
-      if (!found) { setErr(t.eNotFound); return; }
-      if (found.status === "inactive") { setErr(t.inactiveAcc); return; }
-      let sh = null;
-      try { const r = await window.storage.get(`pw-${found.id}`, true); if (r) sh = r.value; } catch (e) { }
-      if (!sh) { setLegacyUser(found); setAuthMode("legacy"); return; }
-      if (await hashPw(frm.pw) !== sh) { setErr(t.wrongPw); return; }
       try {
-        await window.storage.set("session", JSON.stringify(found));
-        setUser(found);
+        await signInWithEmailAndPassword(auth, email, frm.pw);
       } catch (e) {
-        setErr(lang === "de" ? "Anmeldefehler" : "Login error");
+        setErr(t.wrongPw || (lang === "de" ? "Anmeldefehler" : "Login error"));
       }
     }
   };
@@ -63,54 +51,29 @@ export function AuthPage({ lang, setLang, t, setUser, notify, clearAll }) {
   const doForgot = async () => {
     setErr("");
     const email = frm.email.trim().toLowerCase();
-    let users = [];
-    try { const r = await window.storage.get("all-users", true); if (r) users = JSON.parse(r.value); } catch (e) { }
-    const found = users.find(u => u.email === email);
-    if (!found) { setErr(t.eNotFound); return; }
-    const code = genCode();
-    try { await window.storage.set(`reset-${found.id}`, JSON.stringify({ code, expires: Date.now() + 15 * 60 * 1000 }), true); } catch (e) { }
-    setResetState({ email, code, userId: found.id });
-    setAuthMode("code");
-  };
-
-  const doVerify = async () => {
-    setErr("");
+    if (!email) { setErr(t.eNotFound); return; }
     try {
-      const r = await window.storage.get(`reset-${resetState.userId}`, true);
-      if (!r) { setErr(t.codeInvalid); return; }
-      const d = JSON.parse(r.value);
-      if (frm.resetCode !== d.code || Date.now() > d.expires) { setErr(t.codeInvalid); return; }
-      setAuthMode("resetpw");
-    } catch (e) {
-      setErr(t.codeInvalid);
-    }
-  };
-
-  const doResetPw = async () => {
-    setErr("");
-    const pe = valPw(frm.newPw, lang);
-    if (pe.length) { setErr(`${t.pwWeak}: ${pe.join(", ")}`); return; }
-    if (frm.newPw !== frm.newPw2) { setErr(t.pwMismatch); return; }
-    try {
-      await window.storage.set(`pw-${resetState.userId}`, await hashPw(frm.newPw), true);
-      try { await window.storage.delete(`reset-${resetState.userId}`, true); } catch (e) { }
-      setAuthMode("login");
-      setTimeout(() => setErr(t.resetOK), 50);
-    } catch (e) {
-      setErr(lang === "de" ? "Fehler" : "Error");
+      await sendPasswordResetEmail(auth, email);
+      setErr(lang === "de" ? "E-Mail gesendet!" : "Email sent!");
+    } catch(e) {
+      setErr(t.eNotFound);
     }
   };
 
   const doCheckInvite = async () => {
     setErr("");
     const code = frm.inviteCode.trim().toUpperCase();
-    let users = [];
-    try { const r = await window.storage.get("all-users", true); if (r) users = JSON.parse(r.value); } catch (e) { }
-    const found = users.find(u => u.inviteCode === code && u.status === "invited");
-    if (!found) { setErr(t.inviteInvalid); return; }
-    if (Date.now() > found.inviteExpires) { setErr(t.inviteExpired); return; }
-    setActivatingEmp(found);
-    setAuthMode("setInvitePw");
+    try {
+      const q = query(collection(db, "users"), where("inviteCode", "==", code), where("status", "==", "invited"));
+      const snaps = await getDocs(q);
+      if (snaps.empty) { setErr(t.inviteInvalid); return; }
+      const found = { ...snaps.docs[0].data(), id: snaps.docs[0].id };
+      if (Date.now() > found.inviteExpires) { setErr(t.inviteExpired); return; }
+      setActivatingEmp(found);
+      setAuthMode("setInvitePw");
+    } catch(e) {
+      setErr(t.inviteInvalid);
+    }
   };
 
   const doActivate = async () => {
@@ -119,20 +82,18 @@ export function AuthPage({ lang, setLang, t, setUser, notify, clearAll }) {
     if (pe.length) { setErr(`${t.pwWeak}: ${pe.join(", ")}`); return; }
     if (frm.pw !== frm.pw2) { setErr(t.pwMismatch); return; }
     try {
-      await window.storage.set(`pw-${activatingEmp.id}`, await hashPw(frm.pw), true);
-      let users = [];
-      try { const r = await window.storage.get("all-users", true); if (r) users = JSON.parse(r.value); } catch (e) { }
-      const upd = users.map(u => u.id === activatingEmp.id ? { ...u, status: "active", inviteCode: undefined, inviteExpires: undefined } : u);
-      await window.storage.set("all-users", JSON.stringify(upd), true);
-      const au = { ...activatingEmp, status: "active" };
-      await window.storage.set("session", JSON.stringify(au));
-      setUser(au);
+      const cred = await createUserWithEmailAndPassword(auth, activatingEmp.email, frm.pw);
+      const newUid = cred.user.uid;
+      const au = { ...activatingEmp, status: "active", inviteCode: null, inviteExpires: null };
+      delete au.id;
+      await setDoc(doc(db, "users", newUid), au);
+      await deleteDoc(doc(db, "users", activatingEmp.id));
     } catch (e) {
-      setErr(lang === "de" ? "Aktivierung fehlgeschlagen" : "Activation failed");
+      setErr(e.message || (lang === "de" ? "Aktivierung fehlgeschlagen" : "Activation failed"));
     }
   };
 
-  const pwE = ["register", "legacy", "setInvitePw"].includes(authMode) ? valPw(frm.pw, lang) : [];
+  const pwE = ["register", "setInvitePw"].includes(authMode) ? valPw(frm.pw, lang) : [];
   const pwS = frm.pw.length === 0 ? 0 : Math.round(((5 - pwE.length) / 5) * 100);
 
   return (
@@ -260,71 +221,6 @@ export function AuthPage({ lang, setLang, t, setUser, notify, clearAll }) {
             <button type="button" onClick={() => { setAuthMode("login"); setErr(""); }} style={{ ...SBTN, width: "100%", marginTop: 7 }}>{t.backLogin}</button>
           </>
         )}
-        {authMode === "code" && (
-          <>
-            <h2 style={{ fontWeight: 800, fontSize: 18, color: C.dark, margin: "0 0 18px", textAlign: "center" }}>{t.forgotTitle}</h2>
-            <div style={{ backgroundColor: C.grayL, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.gray, marginBottom: 6 }}>{t.simEmail}</div>
-              <div style={{ backgroundColor: C.white, borderRadius: 7, padding: "10px 0", textAlign: "center", border: `1px solid ${C.border}`, marginTop: 7 }}>
-                <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: 8, color: C.red, fontFamily: "monospace" }}>{resetState.code}</div>
-                <div style={{ fontSize: 10, color: C.gray, marginTop: 2 }}>15 min</div>
-              </div>
-            </div>
-            <div style={FGRP}>
-              <FLbl>{t.codeLabel}</FLbl>
-              <input value={frm.resetCode} onChange={e => f("resetCode", e.target.value)} maxLength={6} style={{ ...INP, letterSpacing: 6, fontSize: 18, textAlign: "center", fontWeight: 700 }} />
-            </div>
-            {err && <ErrBox msg={err} />}
-            <button onClick={doVerify} style={PBTN}>{t.verifyCode}</button>
-            <button type="button" onClick={() => { setAuthMode("login"); setErr(""); }} style={{ ...SBTN, width: "100%", marginTop: 7 }}>{t.backLogin}</button>
-          </>
-        )}
-        {authMode === "resetpw" && (
-          <>
-            <h2 style={{ fontWeight: 800, fontSize: 18, color: C.dark, margin: "0 0 18px", textAlign: "center" }}>{t.newPwTitle}</h2>
-            <div style={FGRP}>
-              <FLbl>{t.pw}</FLbl>
-              <div style={{ position: "relative" }}>
-                <input type={showPw ? "text" : "password"} value={frm.newPw} onChange={e => f("newPw", e.target.value)} style={{ ...INP, paddingRight: 72 }} />
-                <button type="button" onClick={() => setShowPw(s => !s)} style={PWTOG}>{showPw ? t.hidepw : t.showpw}</button>
-              </div>
-            </div>
-            <div style={FGRP}><FLbl>{t.pwC}</FLbl><input type={showPw ? "text" : "password"} value={frm.newPw2} onChange={e => f("newPw2", e.target.value)} style={INP} /></div>
-            {err && <ErrBox msg={err} />}
-            <button onClick={doResetPw} style={PBTN}>{t.setPwBtn}</button>
-          </>
-        )}
-        {authMode === "legacy" && (
-          <>
-            <div style={{ backgroundColor: C.amberL, border: `1px solid #fde68a`, borderRadius: 10, padding: 12, marginBottom: 14 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: "#92400E", marginBottom: 3 }}>{t.legacyTitle}</div>
-              <div style={{ fontSize: 11, color: "#78350F" }}>{t.legacyDesc}</div>
-            </div>
-            <div style={FGRP}>
-              <FLbl>{t.pw}</FLbl>
-              <div style={{ position: "relative" }}>
-                <input type={showPw ? "text" : "password"} value={frm.pw} onChange={e => f("pw", e.target.value)} style={{ ...INP, paddingRight: 72 }} />
-                <button type="button" onClick={() => setShowPw(s => !s)} style={PWTOG}>{showPw ? t.hidepw : t.showpw}</button>
-              </div>
-            </div>
-            <div style={FGRP}><FLbl>{t.pwC}</FLbl><input type={showPw ? "text" : "password"} value={frm.pw2} onChange={e => f("pw2", e.target.value)} style={INP} /></div>
-            {err && <ErrBox msg={err} />}
-            <button onClick={async () => {
-              setErr("");
-              const pe = valPw(frm.pw, lang);
-              if (pe.length) { setErr(`${t.pwWeak}: ${pe.join(", ")}`); return; }
-              if (frm.pw !== frm.pw2) { setErr(t.pwMismatch); return; }
-              try {
-                await window.storage.set(`pw-${legacyUser.id}`, await hashPw(frm.pw), true);
-                await window.storage.set("session", JSON.stringify(legacyUser));
-                setUser(legacyUser);
-              } catch (e) {
-                setErr(lang === "de" ? "Fehler" : "Error");
-              }
-            }} style={PBTN}>{t.setPwBtn}</button>
-            <button type="button" onClick={() => { setAuthMode("login"); setErr(""); }} style={{ ...SBTN, width: "100%", marginTop: 7 }}>{t.backLogin}</button>
-          </>
-        )}
       </div>
       <div style={{ marginTop: 16, textAlign: "center" }}>
         <button onClick={clearAll} style={{ fontSize: 11, color: C.gray, border: `1px solid ${C.border}`, backgroundColor: C.white, borderRadius: 6, padding: "5px 12px", cursor: "pointer" }}>{t.clearData}</button>
@@ -332,3 +228,4 @@ export function AuthPage({ lang, setLang, t, setUser, notify, clearAll }) {
     </div>
   );
 }
+

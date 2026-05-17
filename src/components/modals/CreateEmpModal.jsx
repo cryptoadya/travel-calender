@@ -8,6 +8,9 @@ import { transferLabel } from '../../utils/formatUtils';
 import { genInvite } from '../../utils/authUtils';
 import { DH_COMPANIES, TRANSFER_TYPES } from '../../constants/config';
 
+import { db } from '../../lib/firebase';
+import { collection, getDocs, doc, setDoc, query, where } from 'firebase/firestore';
+
 export function CreateEmpModal({ lang, t, onCreated, onClose }) {
   const [f, setF] = useState({ firstName: "", lastName: "", email: "", company: "", transferType: "", homeCountry: "", hostCountry: "", homeEntity: "", hostEntity: "" });
   const [err, setErr] = useState("");
@@ -19,33 +22,36 @@ export function CreateEmpModal({ lang, t, onCreated, onClose }) {
       setErr(lang === "de" ? "Pflichtfelder: Vorname, Nachname, E-Mail" : "Required: First name, last name, email");
       return;
     }
-    let users = [];
-    try { const r = await window.storage.get("all-users", true); if (r) users = JSON.parse(r.value); } catch (e) { }
-    if (users.find(u => u.email === f.email.trim().toLowerCase())) { setErr(t.eExists); return; }
     
-    const nu = {
-      id: Date.now().toString(),
-      firstName: f.firstName.trim(),
-      lastName: f.lastName.trim(),
-      email: f.email.trim().toLowerCase(),
-      company: f.company,
-      transferType: f.transferType,
-      homeCountry: f.homeCountry,
-      hostCountry: f.hostCountry,
-      homeEntity: f.transferType === "assignment" ? f.homeEntity : "",
-      hostEntity: f.transferType === "assignment" ? f.hostEntity : "",
-      role: "employee",
-      status: "invited",
-      inviteCode: genInvite(),
-      inviteExpires: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      reg: new Date().toISOString()
-    };
+    const email = f.email.trim().toLowerCase();
     try {
-      users.push(nu);
-      await window.storage.set("all-users", JSON.stringify(users), true);
-      onCreated(nu);
+      const q = query(collection(db, "users"), where("email", "==", email));
+      const snaps = await getDocs(q);
+      if (!snaps.empty) { setErr(t.eExists); return; }
+      
+      const nu = {
+        firstName: f.firstName.trim(),
+        lastName: f.lastName.trim(),
+        email,
+        company: f.company,
+        transferType: f.transferType,
+        homeCountry: f.homeCountry,
+        hostCountry: f.hostCountry,
+        homeEntity: f.transferType === "assignment" ? f.homeEntity : "",
+        hostEntity: f.transferType === "assignment" ? f.hostEntity : "",
+        role: "employee",
+        status: "invited",
+        inviteCode: genInvite(),
+        inviteExpires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        reg: new Date().toISOString()
+      };
+      
+      const docRef = doc(collection(db, "users"));
+      await setDoc(docRef, nu);
+      onCreated({ ...nu, id: docRef.id });
     } catch (e) {
-      setErr(lang === "de" ? "Speicherfehler" : "Storage error");
+      console.error(e);
+      setErr(lang === "de" ? "Datenbankfehler" : "Database error");
     }
   };
   

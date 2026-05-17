@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: check if authenticated user is admin
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // User profiles
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      // Evaluate isOwner first so isAdmin() doesn't throw if doc doesn't exist yet
+      allow write: if (request.auth != null && request.auth.uid == uid) || isAdmin();
+    }
+
+    // Calendar entries and locked months
+    match /data/{docId} {
+      allow read: if request.auth != null;
+      allow write: if (request.auth != null && docId == 'e-' + request.auth.uid)
+                   || (request.auth != null && docId == 'l-' + request.auth.uid)
+                   || isAdmin();
+    }
+
+    // Meta docs (rem-settings): admin only write, auth read
+    match /meta/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+  }
+}

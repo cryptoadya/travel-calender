@@ -7,6 +7,9 @@ import { dName, transferLabel, ctryName } from '../utils/formatUtils';
 import { calcRangeSummary } from '../utils/statsUtils';
 import { genInvite } from '../utils/authUtils';
 
+import { db } from '../lib/firebase';
+import { collection, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+
 import { NavBar, Card } from '../components/ui/Layout';
 import { NBtn, SBTN, PBTN, ToggleSW } from '../components/ui/Buttons';
 import { INP, FLbl } from '../components/ui/Inputs';
@@ -44,19 +47,23 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
 
   const loadAll = async () => {
     try {
-      const r = await window.storage.get("all-users", true);
-      if (r) {
-        const us = JSON.parse(r.value).filter(u => u.role !== "admin");
-        setEmps(us);
-        const ae = {}, al = {};
-        for (const u of us) {
-          try { const r2 = await window.storage.get(`e-${u.id}`, true); if (r2) ae[u.id] = JSON.parse(r2.value); } catch (e) { }
-          try { const r3 = await window.storage.get(`l-${u.id}`, true); if (r3) al[u.id] = JSON.parse(r3.value); } catch (e) { }
-        }
-        setAllE(ae);
-        setAllL(al);
+      const snap = await getDocs(collection(db, "users"));
+      const us = [];
+      snap.forEach(d => {
+        const u = d.data();
+        if (u.role !== "admin") us.push({ ...u, id: d.id });
+      });
+      setEmps(us);
+      const ae = {}, al = {};
+      for (const u of us) {
+        try { const r2 = await window.storage.get(`e-${u.id}`, true); if (r2) ae[u.id] = JSON.parse(r2.value); } catch (e) { }
+        try { const r3 = await window.storage.get(`l-${u.id}`, true); if (r3) al[u.id] = JSON.parse(r3.value); } catch (e) { }
       }
-    } catch (e) { }
+      setAllE(ae);
+      setAllL(al);
+    } catch (e) {
+      console.error(e);
+    }
     try { const r = await window.storage.get("rem-settings", true); if (r) setRem(JSON.parse(r.value)); } catch (e) { }
   };
 
@@ -66,37 +73,28 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
 
   const deleteEmp = emp => setConfirmDlg({
     title: t.cfmDelTitle, message: `"${dName(emp)}" – ${t.cfmDelMsg}`, isDanger: true, okText: t.yesDel, onOk: async () => {
-      let users = [];
-      try { const r = await window.storage.get("all-users", true); if (r) users = JSON.parse(r.value); } catch (e) { }
-      try { await window.storage.set("all-users", JSON.stringify(users.filter(u => u.id !== emp.id)), true); } catch (e) { }
+      try { await deleteDoc(doc(db, "users", emp.id)); } catch (e) { }
       try { await window.storage.delete(`e-${emp.id}`, true); } catch (e) { }
       try { await window.storage.delete(`l-${emp.id}`, true); } catch (e) { }
-      try { await window.storage.delete(`pw-${emp.id}`, true); } catch (e) { }
       setConfirmDlg(null); await loadAll(); notify(`${dName(emp)} ${lang === "de" ? "gelöscht" : "deleted"}`);
     }
   });
 
   const requestSetInactive = emp => setConfirmDlg({
     title: t.cfmInactTitle, message: `"${dName(emp)}" – ${t.cfmInactMsg}`, isDanger: false, okText: t.yes, onOk: async () => {
-      let users = [];
-      try { const r = await window.storage.get("all-users", true); if (r) users = JSON.parse(r.value); } catch (e) { }
-      try { await window.storage.set("all-users", JSON.stringify(users.map(u => u.id === emp.id ? { ...u, status: "inactive" } : u)), true); } catch (e) { }
+      try { await updateDoc(doc(db, "users", emp.id), { status: "inactive" }); } catch (e) { }
       setConfirmDlg(null); await loadAll();
     }
   });
 
   const setActive = async emp => {
-    let users = [];
-    try { const r = await window.storage.get("all-users", true); if (r) users = JSON.parse(r.value); } catch (e) { }
-    try { await window.storage.set("all-users", JSON.stringify(users.map(u => u.id === emp.id ? { ...u, status: "active" } : u)), true); } catch (e) { }
+    try { await updateDoc(doc(db, "users", emp.id), { status: "active" }); } catch (e) { }
     await loadAll();
   };
 
   const regenInvite = async emp => {
     const nc = genInvite(), ne = Date.now() + 7 * 24 * 60 * 60 * 1000;
-    let users = [];
-    try { const r = await window.storage.get("all-users", true); if (r) users = JSON.parse(r.value); } catch (e) { }
-    try { await window.storage.set("all-users", JSON.stringify(users.map(u => u.id === emp.id ? { ...u, inviteCode: nc, inviteExpires: ne } : u)), true); } catch (e) { }
+    try { await updateDoc(doc(db, "users", emp.id), { inviteCode: nc, inviteExpires: ne }); } catch (e) { }
     setInvitePreview({ ...emp, inviteCode: nc, inviteExpires: ne }); await loadAll();
   };
 
