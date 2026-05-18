@@ -30,6 +30,7 @@ export function EmpDetailModal({ emp, lang, t, onEdit, onViewCal, onClose }) {
       <Row label={t.transferType} value={emp.transferType ? transferLabel(emp.transferType, lang) : t.notSet} hi={!!emp.transferType} />
       <Row label={t.homeCo} value={emp.homeCountry ? (emp.homeCountry + " – " + ctryName(emp.homeCountry, lang)) : t.notSet} />
       <Row label={t.hostCo} value={emp.hostCountry ? (emp.hostCountry + " – " + ctryName(emp.hostCountry, lang)) : t.notSet} />
+      <Row label={t.comment} value={emp.comment || t.notSet} />
       {emp.transferType === "assignment" && (
         <>
           <div style={{ backgroundColor: C.amberL, borderRadius: 6, padding: "5px 10px", margin: "8px 0 0", fontSize: 10, fontWeight: 700, color: "#92400E", textTransform: "uppercase" }}>Assignment</div>

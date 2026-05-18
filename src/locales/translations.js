@@ -4,6 +4,7 @@ export const T = {
   de: {
     app: "Reisekalender", signIn: "Anmelden", reg: "Selbst registrieren", logout: "Abmelden", haveAcc: "Bereits registriert?", noAcc: "Noch kein Konto?",
     name: "Vollständiger Name", firstName: "Vorname", lastName: "Nachname", email: "E-Mail-Adresse", company: "Unternehmen",
+    comment: "Kommentar", commentPlaceholder: "Zusätzliche Hinweise zum Mitarbeiter",
     pw: "Passwort", pwC: "Passwort bestätigen", role: "Rolle", emp: "Mitarbeiter/in", adm: "Administrator/in",
     code: "Admin-Code", codeHint: "Vom IT-Administrator", wrongCode: "Falscher Admin-Code", eExists: "E-Mail bereits registriert",
     eNotFound: "E-Mail nicht gefunden", pwMismatch: "Passwörter stimmen nicht überein", pwWeak: "Passwort zu schwach",
@@ -61,6 +62,7 @@ export const T = {
   en: {
     app: "Travel Calendar", signIn: "Sign In", reg: "Self Register", logout: "Sign Out", haveAcc: "Already registered?", noAcc: "No account yet?",
     name: "Full Name", firstName: "First Name", lastName: "Last Name", email: "Email Address", company: "Company",
+    comment: "Comment", commentPlaceholder: "Additional employee notes",
     pw: "Password", pwC: "Confirm Password", role: "Role", emp: "Employee", adm: "Administrator",
     code: "Admin Code", codeHint: "From IT administrator", wrongCode: "Incorrect admin code", eExists: "Email already registered",
     eNotFound: "Email not found", pwMismatch: "Passwords do not match", pwWeak: "Password too weak",
