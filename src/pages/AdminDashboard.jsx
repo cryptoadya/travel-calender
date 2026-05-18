@@ -43,6 +43,10 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const [unlockAllEmp, setUnlockAllEmp] = useState(null);
   const [unlockMonthConfirm, setUnlockMonthConfirm] = useState(null);
   const [adminYr, setAdminYr] = useState(new Date().getFullYear());
+  const [travelCompanyFilter, setTravelCompanyFilter] = useState("");
+  const [travelEmployeeFilter, setTravelEmployeeFilter] = useState("");
+  const [teamCompanyFilter, setTeamCompanyFilter] = useState("");
+  const [teamEmployeeFilter, setTeamEmployeeFilter] = useState("");
 
   const notify = msg => { setNotif(msg); setTimeout(() => setNotif(null), 2800); };
 
@@ -146,11 +150,37 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
     return g;
   };
 
+  const getCompanyKey = emp => DH_COMPANIES.includes(emp.company) ? emp.company : "__other";
+  const employeeMatches = (emp, query) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return [emp.firstName, emp.lastName, dName(emp), emp.email].some(v => String(v || "").toLowerCase().includes(q));
+  };
+  const filterEmployees = (list, companyFilter, employeeFilter) => list.filter(emp =>
+    (!companyFilter || getCompanyKey(emp) === companyFilter) && employeeMatches(emp, employeeFilter)
+  );
+  const companyOptions = DH_COMPANIES.concat(["__other"]);
+  const companyLabel = co => co === "__other" ? t.otherCompany : co;
+  const FilterBar = ({ companyValue, onCompanyChange, employeeValue, onEmployeeChange }) => (
+    <Card style={{ marginBottom: 12, padding: 10 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <select value={companyValue} onChange={e => onCompanyChange(e.target.value)} style={{ ...INP, width: "auto", minWidth: 190, padding: "6px 10px", fontSize: 12 }}>
+          <option value="">{t.allCompanies}</option>
+          {companyOptions.map(co => <option key={co} value={co}>{companyLabel(co)}</option>)}
+        </select>
+        <input value={employeeValue} onChange={e => onEmployeeChange(e.target.value)} placeholder={t.searchEmployee} style={{ ...INP, width: 240, padding: "6px 10px", fontSize: 12 }} />
+      </div>
+    </Card>
+  );
+
   if (viewEmp) return <CalendarApp lang={lang} setLang={setLang} t={t} user={user} logout={logout} uid={viewEmp.id} readOnly={true} empName={dName(viewEmp)} onBack={() => setViewEmp(null)} adminUnlock={async mk => unlockMo(viewEmp.id, mk)} initialYr={viewEmp.initialYr} initialMo={viewEmp.initialMo} />;
 
   const activeEmps = emps.filter(e => e.status === "active");
+  const filteredTravelEmps = filterEmployees(activeEmps, travelCompanyFilter, travelEmployeeFilter);
+  const filteredTeamEmps = filterEmployees(emps, teamCompanyFilter, teamEmployeeFilter);
   const activeGroups = groupByDH(activeEmps);
-  const allGroups = groupByDH(emps);
+  const filteredTravelGroups = groupByDH(filteredTravelEmps);
+  const filteredTeamGroups = groupByDH(filteredTeamEmps);
 
   return (
     <div style={{ fontFamily: "Inter,sans-serif", backgroundColor: C.grayL, minHeight: "100vh" }}>
@@ -171,7 +201,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
       <div style={{ padding: 14, maxWidth: 1400, margin: "0 auto" }}>
         {view === "travel" && <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-            <h2 style={{ fontWeight: 800, fontSize: 16, color: C.dark, margin: 0 }}>{t.travelData} ({activeEmps.length})</h2>
+            <h2 style={{ fontWeight: 800, fontSize: 16, color: C.dark, margin: 0 }}>{t.travelData} ({filteredTravelEmps.length})</h2>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <select value={adminYr} onChange={e => setAdminYr(Number(e.target.value))} style={{ ...INP, width: "auto", padding: "5px 10px", fontSize: 12 }}>
                 {AVAIL_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
@@ -179,10 +209,12 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
               <button onClick={loadAll} style={SBTN}>{t.ref} ⟳</button>
             </div>
           </div>
+          <FilterBar companyValue={travelCompanyFilter} onCompanyChange={setTravelCompanyFilter} employeeValue={travelEmployeeFilter} onEmployeeChange={setTravelEmployeeFilter} />
           {activeEmps.length === 0 ? <Card><div style={{ textAlign: "center", color: C.gray, padding: 28, fontSize: 13 }}>{t.noE}</div></Card> :
-            DH_COMPANIES.concat(["__other"]).map(co => {
-              const list = activeGroups[co] || []; if (!list.length) return null;
-              const label = co === "__other" ? (lang === "de" ? "Sonstiges" : "Other") : co;
+            filteredTravelEmps.length === 0 ? <Card><div style={{ textAlign: "center", color: C.gray, padding: 28, fontSize: 13 }}>{t.noFilterResults}</div></Card> :
+            companyOptions.map(co => {
+              const list = filteredTravelGroups[co] || []; if (!list.length) return null;
+              const label = companyLabel(co);
               return (<div key={co} style={{ marginBottom: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", borderBottom: `2px solid ${C.border}`, marginBottom: 6 }}>
                   <span>🏢</span><span style={{ fontWeight: 800, fontSize: 13, color: C.dark }}>{label}</span>
@@ -271,6 +303,9 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                         <span style={{ color: C.gray, fontSize: 11 }}>{expanded ? "▼" : "▶"}</span>
                         <span style={{ fontWeight: 800, fontSize: 13, color: C.dark }}>{dName(emp)}</span>
                         {hasWarn && <span style={{ fontSize: 13 }}>⚠️</span>}
+                        {emp.transferType && <span style={{ fontSize: 10, backgroundColor: C.blueL, color: C.blue, padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>{transferLabel(emp.transferType, lang)}</span>}
+                        {emp.homeCountry && <span style={{ fontSize: 10, backgroundColor: C.grayL, color: C.slate, padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>🏠 {emp.homeCountry}</span>}
+                        {emp.hostCountry && <span style={{ fontSize: 10, backgroundColor: C.grayL, color: C.slate, padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>✈️ {emp.hostCountry}</span>}
                         {!expanded && <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                           {countries.slice(0, 4).map(([code, { total }]) => (
                             <span key={code} style={{ fontSize: 10, backgroundColor: total >= 183 ? C.redL : total >= 90 ? C.amberL : C.grayL, color: total >= 183 ? C.red : total >= 90 ? C.amber : C.gray, padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>{code}: {total}d</span>
@@ -307,13 +342,15 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
 
         {view === "team" && <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h2 style={{ fontWeight: 800, fontSize: 16, color: C.dark, margin: 0 }}>👥 {t.team} ({emps.length})</h2>
+            <h2 style={{ fontWeight: 800, fontSize: 16, color: C.dark, margin: 0 }}>👥 {t.team} ({filteredTeamEmps.length})</h2>
             <button onClick={() => setShowCreate(true)} style={{ ...PBTN, width: "auto", padding: "8px 16px", fontSize: 12 }}>+ {t.addEmp}</button>
           </div>
+          <FilterBar companyValue={teamCompanyFilter} onCompanyChange={setTeamCompanyFilter} employeeValue={teamEmployeeFilter} onEmployeeChange={setTeamEmployeeFilter} />
           {emps.length === 0 ? <Card><div style={{ textAlign: "center", color: C.gray, padding: 28, fontSize: 13 }}>{t.noTeam}</div></Card> :
-            DH_COMPANIES.concat(["__other"]).map(co => {
-              const list = allGroups[co] || []; if (!list.length) return null;
-              const label = co === "__other" ? (lang === "de" ? "Sonstiges" : "Other") : co;
+            filteredTeamEmps.length === 0 ? <Card><div style={{ textAlign: "center", color: C.gray, padding: 28, fontSize: 13 }}>{t.noFilterResults}</div></Card> :
+            companyOptions.map(co => {
+              const list = filteredTeamGroups[co] || []; if (!list.length) return null;
+              const label = companyLabel(co);
               return (<div key={co} style={{ marginBottom: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", borderBottom: `2px solid ${C.border}`, marginBottom: 8 }}><span>🏢</span><span style={{ fontWeight: 800, fontSize: 13, color: C.dark }}>{label}</span><span style={{ fontSize: 11, color: C.gray, backgroundColor: C.grayL, padding: "1px 7px", borderRadius: 10 }}>{list.length}</span></div>
                 {list.map(emp => (<Card key={emp.id} style={{ marginBottom: 7, cursor: "pointer" }} onClick={() => setDetailEmp(emp)}>
