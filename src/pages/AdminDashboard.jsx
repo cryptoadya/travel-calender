@@ -144,6 +144,33 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
     return { pct: Math.round((fill / d) * 100), fill, total: d, wbyCo };
   };
 
+  const monthKey = (y, m) => `${y}-${String(m + 1).padStart(2, "0")}`;
+  const monthLabel = (y, m) => `${MOS[lang][m]} ${y}`;
+  const getMonthDeadline = (y, m) => new Date(y, m + 1, 3);
+  const getAdminMonthStatus = (y, m, data, lockedMonths) => {
+    const mk = monthKey(y, m);
+    const isLocked = lockedMonths.includes(mk);
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const monthStart = new Date(y, m, 1);
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const deadline = getMonthDeadline(y, m);
+    const daysToDeadline = Math.ceil((deadline - todayStart) / (24 * 60 * 60 * 1000));
+    const isFutureMonth = monthStart > currentMonthStart;
+    const needsSubmission = !isFutureMonth;
+    const isOverdue = needsSubmission && !isLocked && daysToDeadline < 0;
+    const isDueSoon = needsSubmission && !isLocked && daysToDeadline >= 0 && daysToDeadline <= 7;
+    return { ...data, mk, y, m, isLocked, needsSubmission, isOverdue, isDueSoon, daysToDeadline };
+  };
+
+  const monthStatusLabel = month => {
+    if (month.isLocked) return t.submitted;
+    if (month.isOverdue) return t.overdue;
+    if (month.isDueSoon) return t.dueSoon;
+    if (!month.needsSubmission) return t.upcoming;
+    return t.notSubmitted;
+  };
+
   const groupByDH = empList => {
     const g = {}; DH_COMPANIES.forEach(c => g[c] = []); g["__other"] = [];
     empList.forEach(e => { const k = DH_COMPANIES.includes(e.company) ? e.company : "__other"; g[k].push(e); });
@@ -223,34 +250,64 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                 {list.map(emp => {
                   const lk = allL[emp.id] || [];
                   const expanded = expandedEmps.has(emp.id);
-                  const months = Array.from({ length: 12 }, (_, m) => ({ m, ...getEmpMonthData(emp.id, adminYr, m) }));
+                  const months = Array.from({ length: 12 }, (_, m) => getAdminMonthStatus(adminYr, m, getEmpMonthData(emp.id, adminYr, m), lk));
                   const yrWbyCo = {}; months.forEach(({ wbyCo }) => Object.entries(wbyCo).forEach(([c, d]) => { yrWbyCo[c] = (yrWbyCo[c] || 0) + d; }));
-                  const lockedThisYear = lk.filter(mk => mk.startsWith(String(adminYr)));
+                  const visibleMonths = months.filter(mo => mo.needsSubmission);
+                  const submittedMonths = months.filter(mo => mo.isLocked);
+                  const notSubmittedMonths = visibleMonths.filter(mo => !mo.isLocked);
+                  const overdueMonths = months.filter(mo => mo.isOverdue);
+                  const dueSoonMonths = months.filter(mo => mo.isDueSoon);
+                  const submittedPct = visibleMonths.length ? Math.round((submittedMonths.length / visibleMonths.length) * 100) : 0;
+                  const filledDays = visibleMonths.reduce((sum, mo) => sum + mo.fill, 0);
+                  const totalDays = visibleMonths.reduce((sum, mo) => sum + mo.total, 0);
+                  const fillPct = totalDays ? Math.round((filledDays / totalDays) * 100) : 0;
                   return (<Card key={emp.id} style={{ marginBottom: 6 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
                         <button onClick={() => toggleEmp(emp.id)} style={{ fontWeight: 800, fontSize: 13, color: C.red, border: "none", backgroundColor: "transparent", cursor: "pointer", padding: 0, textAlign: "left" }}>
                           {expanded ? "▼" : "▶"} {dName(emp)}
                         </button>
-                        {lockedThisYear.length > 0 && <span style={{ fontSize: 10, backgroundColor: C.greenL, color: C.green, padding: "1px 7px", borderRadius: 4, fontWeight: 700 }}>🔒 {lockedThisYear.length} {t.confirmedMonths}</span>}
-                        {lockedThisYear.length === 0 && <span style={{ fontSize: 10, backgroundColor: C.grayL, color: C.gray, padding: "1px 7px", borderRadius: 4 }}>{lang === "de" ? "Keine gesperrten Monate" : "No locked months"}</span>}
+                        <span style={{ fontSize: 10, backgroundColor: C.greenL, color: C.green, padding: "1px 7px", borderRadius: 4, fontWeight: 700 }}>🔒 {submittedMonths.length}/{visibleMonths.length || 12} {t.submittedMonths}</span>
+                        {overdueMonths.length > 0 && <span style={{ fontSize: 10, backgroundColor: C.redL, color: C.red, padding: "1px 7px", borderRadius: 4, fontWeight: 800 }}>⚠ {overdueMonths.length} {t.overdue}</span>}
+                        {dueSoonMonths.length > 0 && <span style={{ fontSize: 10, backgroundColor: C.redL, color: C.red, padding: "1px 7px", borderRadius: 4, fontWeight: 800 }}>⚠ {dueSoonMonths.length} {t.dueWithin7}</span>}
                       </div>
                       <div style={{ display: "flex", gap: 5 }}>
                         <button onClick={() => setExportEmp(emp)} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 11, fontWeight: 700, backgroundColor: C.green, color: C.white, border: "none", cursor: "pointer" }}>📥</button>
                         <button onClick={() => setViewEmp(emp)} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer" }}>📅</button>
                       </div>
                     </div>
+                    <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8 }}>
+                      {[[t.submittedProgress, submittedPct, `${submittedMonths.length}/${visibleMonths.length || 12} ${t.monthsShort}`, C.green], [t.fillProgress, fillPct, `${filledDays}/${totalDays || 0} ${lang === "de" ? "Tage" : "days"}`, fillPct === 100 ? C.green : fillPct > 60 ? C.amber : C.red]].map(([label, value, detail, color]) => (
+                        <div key={label}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.gray, marginBottom: 3 }}><span style={{ fontWeight: 700 }}>{label}</span><span>{detail} · {value}%</span></div>
+                          <div style={{ height: 5, backgroundColor: C.border, borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${value}%`, height: "100%", backgroundColor: color, borderRadius: 3 }} /></div>
+                        </div>
+                      ))}
+                    </div>
                     {expanded && <>
+                      <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 8 }}>
+                        <div style={{ backgroundColor: C.greenL, border: `1px solid #86efac`, borderRadius: 7, padding: "7px 9px" }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: C.green, marginBottom: 3 }}>{t.submittedMonths}</div>
+                          <div style={{ fontSize: 10, color: C.dark, lineHeight: 1.5 }}>{submittedMonths.length ? submittedMonths.map(mo => monthLabel(mo.y, mo.m)).join(", ") : t.none}</div>
+                        </div>
+                        <div style={{ backgroundColor: notSubmittedMonths.some(mo => mo.isOverdue || mo.isDueSoon) ? C.redL : C.grayL, border: `1px solid ${notSubmittedMonths.some(mo => mo.isOverdue || mo.isDueSoon) ? "#ffb3bb" : C.border}`, borderRadius: 7, padding: "7px 9px" }}>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: notSubmittedMonths.some(mo => mo.isOverdue || mo.isDueSoon) ? C.red : C.gray, marginBottom: 3 }}>{t.notSubmittedMonths}</div>
+                          <div style={{ fontSize: 10, color: C.dark, lineHeight: 1.5 }}>{notSubmittedMonths.length ? notSubmittedMonths.map(mo => `${monthLabel(mo.y, mo.m)} (${monthStatusLabel(mo)})`).join(", ") : t.none}</div>
+                        </div>
+                      </div>
                       <div style={{ marginTop: 12, fontSize: 10, fontWeight: 700, color: C.gray, marginBottom: 4, textTransform: "uppercase" }}>{t.compL} {adminYr}</div>
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(12,1fr) 1.6fr", gap: 3 }}>
                         {months.map(({ m, pct, wbyCo }) => {
-                          const mk = `${adminYr}-${String(m + 1).padStart(2, "0")}`, isLk = lk.includes(mk);
+                          const month = months[m], { mk, isLocked: isLk, isOverdue, isDueSoon } = month;
                           const topCo = Object.entries(wbyCo).sort((a, b) => b[1] - a[1]).slice(0, 2);
+                          const statusColor = isLk ? C.green : (isOverdue || isDueSoon) ? C.red : pct === 100 ? C.amber : pct > 60 ? C.amber : C.red;
+                          const statusBg = isLk ? C.greenL : (isOverdue || isDueSoon) ? C.redL : pct === 100 ? C.amberL : pct > 60 ? C.amberL : C.redL;
                           return (<div key={m} style={{ textAlign: "center" }}>
                             <div style={{ fontSize: 8, color: C.gray, marginBottom: 2 }}>{MOS[lang][m]}</div>
-                            <div style={{ backgroundColor: pct === 100 ? C.greenL : pct > 60 ? C.amberL : C.redL, borderRadius: 4, padding: "3px 2px", position: "relative", cursor: "pointer", minHeight: 42 }} onClick={() => setViewEmp({ ...emp, initialYr: adminYr, initialMo: m })}>
-                              <div style={{ fontSize: 8, fontWeight: 700, color: pct === 100 ? C.green : pct > 60 ? C.amber : C.red }}>{pct}%</div>
+                            <div style={{ backgroundColor: statusBg, border: `1px solid ${isOverdue || isDueSoon ? "#ffb3bb" : "transparent"}`, borderRadius: 4, padding: "3px 2px", position: "relative", cursor: "pointer", minHeight: 52, boxSizing: "border-box" }} onClick={() => setViewEmp({ ...emp, initialYr: adminYr, initialMo: m })}>
+                              <div style={{ fontSize: 8, fontWeight: 700, color: statusColor }}>{pct}%</div>
                               {topCo.map(([code, days]) => <div key={code} style={{ fontSize: 7, color: C.dark, lineHeight: 1.2 }}>{code}:{days}</div>)}
+                              <div style={{ fontSize: 6, color: statusColor, lineHeight: 1.2, fontWeight: 800, marginTop: 1 }}>{monthStatusLabel(month)}</div>
                               {isLk && <div style={{ fontSize: 7, position: "absolute", top: -3, right: -1 }}>🔒</div>}
                             </div>
                             {isLk && <button onClick={() => requestUnlockMo(emp, mk)} style={{ fontSize: 7, marginTop: 1, padding: "1px 2px", borderRadius: 3, border: `1px solid ${C.border}`, backgroundColor: C.redL, color: C.red, cursor: "pointer", width: "100%" }}>🔓</button>}
@@ -262,7 +319,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                             {Object.entries(yrWbyCo).sort((a, b) => b[1] - a[1]).map(([code, days]) => <div key={code} style={{ fontSize: 7, fontWeight: 700, color: C.blue, lineHeight: 1.3 }}>{code}:{days}</div>)}
                             {Object.keys(yrWbyCo).length === 0 && <div style={{ fontSize: 7, color: C.gray }}>–</div>}
                           </div>
-                          {lockedThisYear.length > 0 && <button onClick={() => setUnlockAllEmp(emp)} style={{ fontSize: 7, marginTop: 1, padding: "1px 3px", borderRadius: 3, border: `1px solid ${C.border}`, backgroundColor: C.amberL, color: "#92400E", cursor: "pointer", width: "100%", fontWeight: 700 }}>🔓 all</button>}
+                          {submittedMonths.length > 0 && <button onClick={() => setUnlockAllEmp(emp)} style={{ fontSize: 7, marginTop: 1, padding: "1px 3px", borderRadius: 3, border: `1px solid ${C.border}`, backgroundColor: C.amberL, color: "#92400E", cursor: "pointer", width: "100%", fontWeight: 700 }}>🔓 all</button>}
                         </div>
                       </div>
                     </>}
