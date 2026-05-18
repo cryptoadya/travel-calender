@@ -41,6 +41,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const [compFrom, setCompFrom] = useState(`${new Date().getFullYear()}-01-01`);
   const [compTo, setCompTo] = useState(new Date().toISOString().split("T")[0]);
   const [unlockAllEmp, setUnlockAllEmp] = useState(null);
+  const [unlockMonthConfirm, setUnlockMonthConfirm] = useState(null);
   const [adminYr, setAdminYr] = useState(new Date().getFullYear());
 
   const notify = msg => { setNotif(msg); setTimeout(() => setNotif(null), 2800); };
@@ -109,6 +110,14 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
     setAllL(al => ({ ...al, [uid]: nl })); notify(`${mk} ${t.muOK}`);
   };
 
+  const requestUnlockMo = (emp, mk) => setUnlockMonthConfirm({ emp, mk });
+
+  const confirmUnlockMo = async () => {
+    if (!unlockMonthConfirm) return;
+    await unlockMo(unlockMonthConfirm.emp.id, unlockMonthConfirm.mk);
+    setUnlockMonthConfirm(null);
+  };
+
   const saveRem = async () => {
     try { await window.storage.set("rem-settings", JSON.stringify(rem), true); notify(t.remOK); } catch (e) { }
   };
@@ -148,6 +157,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
       {notif && <Notif msg={notif} />}
       {confirmDlg && <ConfirmModal title={confirmDlg.title} message={confirmDlg.message} onConfirm={confirmDlg.onOk} onCancel={() => setConfirmDlg(null)} confirmText={confirmDlg.okText} cancelText={t.cancel} isDanger={confirmDlg.isDanger} />}
       {unlockAllEmp && <ConfirmModal title={t.unlockAll} message={`${dName(unlockAllEmp)} – ${t.unlockAllMsg}`} onConfirm={() => doUnlockAll(unlockAllEmp)} onCancel={() => setUnlockAllEmp(null)} confirmText={t.yes} cancelText={t.cancel} isDanger={false} />}
+      {unlockMonthConfirm && <ConfirmModal title={t.unlock} message={`${dName(unlockMonthConfirm.emp)} – ${unlockMonthConfirm.mk}. ${lang === "de" ? "Diesen Monat entsperren?" : "Unlock this month?"}`} onConfirm={confirmUnlockMo} onCancel={() => setUnlockMonthConfirm(null)} confirmText={t.yes} cancelText={t.cancel} isDanger={false} />}
       {exportEmp && <AdminExportModal emp={exportEmp} entries={allE[exportEmp.id] || {}} lang={lang} t={t} onClose={() => setExportEmp(null)} />}
       {showCreate && <CreateEmpModal lang={lang} t={t} onClose={() => setShowCreate(false)} onCreated={nu => { setShowCreate(false); setInvitePreview(nu); loadAll(); }} />}
       {invitePreview && <InvitePreviewModal emp={invitePreview} lang={lang} t={t} onClose={() => setInvitePreview(null)} onRegen={() => regenInvite(invitePreview)} />}
@@ -211,7 +221,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                               {topCo.map(([code, days]) => <div key={code} style={{ fontSize: 7, color: C.dark, lineHeight: 1.2 }}>{code}:{days}</div>)}
                               {isLk && <div style={{ fontSize: 7, position: "absolute", top: -3, right: -1 }}>🔒</div>}
                             </div>
-                            {isLk && <button onClick={() => unlockMo(emp.id, mk)} style={{ fontSize: 7, marginTop: 1, padding: "1px 2px", borderRadius: 3, border: `1px solid ${C.border}`, backgroundColor: C.redL, color: C.red, cursor: "pointer", width: "100%" }}>🔓</button>}
+                            {isLk && <button onClick={() => requestUnlockMo(emp, mk)} style={{ fontSize: 7, marginTop: 1, padding: "1px 2px", borderRadius: 3, border: `1px solid ${C.border}`, backgroundColor: C.redL, color: C.red, cursor: "pointer", width: "100%" }}>🔓</button>}
                           </div>);
                         })}
                         <div style={{ textAlign: "center" }}>
