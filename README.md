@@ -1,81 +1,105 @@
 # Travel Calendar
 
-Employee travel day tracking for tax compliance — pilot/MVP.
+Travel Calendar is an MVP for employee travel-day tracking, built for user testing and stakeholder feedback. It helps validate the workflow for calendar entry, monthly locking, admin review, reporting, reminders, and compliance-oriented overviews.
 
-This is a functional pilot/MVP for a Travel Calendar app. The purpose is to let a small group of users test the workflow and then hand the concept over to the internal IT department for a proper production implementation.
+This is not a production-grade compliance system yet. Production use would require stronger identity, backend enforcement, auditability, hardened data access, and operational controls.
+
+## Current MVP Features
+
+- Firebase Auth with Email/Password and Cloud Firestore storage.
+- Employee calendar for daily location and activity tracking.
+- Day Split entries for separate morning and afternoon location/activity values.
+- Month completion tracking and month locking.
+- Employee dashboard warnings for incomplete or unlocked months.
+- Admin Travel Data overview.
+- Monthly submitted/locked overview in Admin Travel Data.
+- Exact submitted and not submitted months per employee.
+- Excel and HTML/PDF reports with country summaries:
+  - Aufenthaltstage / Stay Days by country.
+  - Arbeitstage / Working Days by country.
+- Employee comments in Management.
+- Company and employee filters in Admin Travel Data and Management.
+- Compliance overview with transfer type, home country, and host country.
+- UI-only reminder settings, employee reminder banners, and admin reminder warning blocks.
+- Simplified login page without the animated globe.
+
+## Reminder MVP Limitation
+
+Reminders are dashboard-only in this MVP.
+
+- No emails are sent.
+- No Firebase Functions, Scheduler, SendGrid, Mailgun, SMTP, or other backend delivery service is used.
+- Test users do not need real email addresses for reminder delivery.
 
 ## Local Setup
 
-1. **Clone and install**
+1. Install dependencies:
    ```bash
-   git clone https://github.com/cryptoadya/travel-calender.git
-   cd travel-calender
    npm install
    ```
 
-2. **Configure Firebase**
-   - Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com)
-   - Enable **Authentication** (Email/Password provider)
-   - Enable **Cloud Firestore**
-   - Go to Project Settings → General → Your apps → Web app → Config
-   - Copy `.env.example` to `.env` and fill in your Firebase values:
-     ```bash
-     cp .env.example .env
-     ```
+2. Configure Firebase:
+   - Create a Firebase project.
+   - Enable Firebase Authentication with the Email/Password provider.
+   - Enable Cloud Firestore.
+   - Create a `.env` file with the Firebase web app values.
 
-3. **Deploy Firestore Rules**
-   You need to deploy the security rules to your Firebase project:
+3. Example `.env` variables:
+   ```bash
+   VITE_FIREBASE_API_KEY=...
+   VITE_FIREBASE_AUTH_DOMAIN=...
+   VITE_FIREBASE_PROJECT_ID=...
+   VITE_FIREBASE_STORAGE_BUCKET=...
+   VITE_FIREBASE_MESSAGING_SENDER_ID=...
+   VITE_FIREBASE_APP_ID=...
+   VITE_ADMIN_CODE=...
+   ```
+
+4. Deploy Firestore rules if using a real Firebase project:
    ```bash
    npx firebase-tools deploy --only firestore:rules --project YOUR_PROJECT_ID
    ```
 
-4. **Run locally**
+5. Run locally:
    ```bash
    npm run dev
    ```
 
-## Environment Variables
+6. Build:
+   ```bash
+   npm run build
+   ```
 
-| Variable | Required | Description |
-|---|---|---|
-| `VITE_FIREBASE_API_KEY` | Yes | Firebase API key |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Yes | Firebase Auth domain |
-| `VITE_FIREBASE_PROJECT_ID` | Yes | Firebase project ID |
-| `VITE_FIREBASE_STORAGE_BUCKET` | No | Firebase storage bucket |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | No | Firebase messaging sender ID |
-| `VITE_FIREBASE_APP_ID` | No | Firebase app ID |
-| `VITE_ADMIN_CODE` | Yes | Code required for admin registration (client-side gate) |
+## Data Model
 
-## Firestore Data Model
+The MVP uses the existing `window.storage` abstraction and stores calendar data as JSON strings in Firestore documents.
 
-This MVP uses a simple data model optimized for minimal code changes from the original `localStorage` prototype:
+| Path | Contents |
+|---|---|
+| `users/{uid}` | Employee/admin profile, including `role`, `status`, `company`, `transferType`, `homeCountry`, `hostCountry`, and `comment`. |
+| `data/e-{uid}` | JSON calendar entries keyed by date, for example `{"2026-05-01": {...}}`. |
+| `data/l-{uid}` | JSON locked month list, for example `["2026-05"]`. |
+| `meta/rem-settings` | UI-only reminder settings: `enabled`, `firstReminderDay`, `dailyReminderStartDay`, `adminAlertDay`, and `msg`. |
 
-| Collection | Document ID | Contents |
-|---|---|---|
-| `users` | `{auth_uid}` | User profile (name, role, company, invite code, status). Auth handles credentials. |
-| `data` | `e-{uid}` | JSON string of calendar entries for an employee (`{"2026-05-01": {...}}`) |
-| `data` | `l-{uid}` | JSON string array of locked months for an employee (`["2026-01"]`) |
-| `meta` | `rem-settings` | JSON string of reminder settings (`{enabled, day, msg}`) |
+## Manual Testing Flow
 
-> Note: Storing data as JSON strings (`{ value: "..." }`) inside Firestore documents was an MVP tradeoff to maintain exact compatibility with the original app's `window.storage` abstraction without refactoring all UI components.
+1. Register or log in as an admin.
+2. Create or invite an employee.
+3. Log in as the employee.
+4. Fill calendar days.
+5. Create a Day Split entry.
+6. Complete and lock a month.
+7. Return as admin and check Admin > Travel Data.
+8. Export Excel and HTML/PDF reports.
+9. Check the Compliance overview.
+10. Check Reminder Settings and verify dashboard warning blocks.
 
-## Role Model
+## Known Production Gaps
 
-- **Employee**: Can read and write their own calendar entries. Cannot edit locked months. Can read their own user profile.
-- **Admin**: Can view all employees. Can read and write all users, calendars, locks, and settings. Can generate invite codes for new employees.
-- Roles are stored in `users/{uid}.role`.
-
-## Known MVP Limitations & Production Checklist
-
-The following limitations exist in this pilot and **must be addressed by IT before production launch**:
-
-- [ ] **SSO Integration**: Currently uses Firebase Email/Password. Needs SAML/SSO integration with corporate identity.
-- [ ] **Data Model Overhaul**: The JSON-string-in-Firestore workaround should be replaced with proper typed Firestore sub-collections (e.g., `users/{uid}/entries/{date}`).
-- [ ] **Robust Security Rules**:
-  - The admin role check relies on the client providing a correct admin code and writing `{role: 'admin'}`. Production must use Firebase Auth Custom Claims for roles.
-  - Locked months are enforced in the UI, not in Firestore rules. A user could technically overwrite a locked month via API. Needs a Cloud Function or complex rules.
-  - `users` collection is currently readable by any authenticated user so the Admin dashboard can load the list. Production should restrict this.
-- [ ] **Audit Logging**: Missing tracking for who changed what (important for tax compliance).
-- [ ] **GDPR & Privacy**: Needs data retention policies, right-to-be-forgotten deletion workflows, and data residency checks.
-- [ ] **HR Integration**: Employee list should sync from HR system automatically, rather than manual admin invites.
-- [ ] **Monitoring & Backups**: Set up automated Firestore backups and alerting.
+- Admin role handling should use server-side authorization and Firebase Auth custom claims in production.
+- There is no real automatic email reminder delivery.
+- There is no audit log for calendar, lock, admin, or profile changes.
+- Month locks are MVP app-level behavior and should be backend-enforced in production.
+- JSON blob storage is MVP-friendly but should be normalized for production reporting and audit needs.
+- Firestore access rules should be hardened before production use.
+- SSO, HR integration, monitoring, backups, retention policy, and privacy workflows still need production design.
