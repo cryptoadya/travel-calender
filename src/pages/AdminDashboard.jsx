@@ -326,6 +326,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                       </div>
                       <div style={{ fontSize: 11, color: C.gray }}>{emp.email}</div>
                       {(emp.homeCountry || emp.hostCountry) && <div style={{ fontSize: 10, color: C.slate, marginTop: 2 }}>{emp.homeCountry && <span style={{ marginRight: 8 }}>🏠 {emp.homeCountry}</span>}{emp.hostCountry && <span>✈️ {emp.hostCountry}</span>}</div>}
+                      {emp.comment && <div style={{ fontSize: 10, color: C.slate, marginTop: 4, maxWidth: 520, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><span style={{ fontWeight: 700 }}>{t.comment}:</span> {emp.comment}</div>}
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }} onClick={e => e.stopPropagation()}>
                       {emp.status === "active" && <div style={{ display: "flex", alignItems: "center", gap: 5 }}><span style={{ fontSize: 10, color: C.gray }}>{lang === "de" ? "Aktiv" : "Active"}</span><ToggleSW on={true} onToggle={() => requestSetInactive(emp)} size={18} /></div>}

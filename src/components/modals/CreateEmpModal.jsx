@@ -12,7 +12,7 @@ import { db } from '../../lib/firebase';
 import { collection, getDocs, doc, setDoc, query, where } from 'firebase/firestore';
 
 export function CreateEmpModal({ lang, t, onCreated, onClose }) {
-  const [f, setF] = useState({ firstName: "", lastName: "", email: "", company: "", transferType: "", homeCountry: "", hostCountry: "", homeEntity: "", hostEntity: "" });
+  const [f, setF] = useState({ firstName: "", lastName: "", email: "", company: "", transferType: "", homeCountry: "", hostCountry: "", homeEntity: "", hostEntity: "", comment: "" });
   const [err, setErr] = useState("");
   const ff = (k, v) => setF(x => ({ ...x, [k]: v }));
   
@@ -39,6 +39,7 @@ export function CreateEmpModal({ lang, t, onCreated, onClose }) {
         hostCountry: f.hostCountry,
         homeEntity: f.transferType === "assignment" ? f.homeEntity : "",
         hostEntity: f.transferType === "assignment" ? f.hostEntity : "",
+        comment: f.comment.trim(),
         role: "employee",
         status: "invited",
         inviteCode: genInvite(),
@@ -87,6 +88,7 @@ export function CreateEmpModal({ lang, t, onCreated, onClose }) {
           </div>
         </div>
       )}
+      <div style={{ marginBottom: 11 }}><FLbl>{t.comment}</FLbl><textarea value={f.comment} onChange={e => ff("comment", e.target.value)} placeholder={t.commentPlaceholder} style={{ ...INP, minHeight: 72, resize: "vertical" }} /></div>
       {err && <ErrBox msg={err} />}
       <div style={{ display: "flex", gap: 7 }}>
         <button onClick={create} style={PBTN}>{t.addEmp}</button>

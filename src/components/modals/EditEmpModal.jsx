@@ -18,6 +18,7 @@ export function EditEmpModal({ emp, lang, t, onSaved, onClose }) {
   const [hstco, setHstco] = useState(emp.hostCountry || "");
   const [hent, setHent] = useState(emp.homeEntity || "");
   const [hsent, setHsent] = useState(emp.hostEntity || "");
+  const [comment, setComment] = useState(emp.comment || "");
   
   const save = async () => {
     try {
@@ -29,7 +30,8 @@ export function EditEmpModal({ emp, lang, t, onSaved, onClose }) {
         homeCountry: hco,
         hostCountry: hstco,
         homeEntity: tt === "assignment" ? hent : "",
-        hostEntity: tt === "assignment" ? hsent : ""
+        hostEntity: tt === "assignment" ? hsent : "",
+        comment: comment.trim()
       });
       onSaved();
       onClose();
@@ -69,6 +71,7 @@ export function EditEmpModal({ emp, lang, t, onSaved, onClose }) {
           </div>
         </div>
       )}
+      <div style={{ marginBottom: 11 }}><FLbl>{t.comment}</FLbl><textarea value={comment} onChange={e => setComment(e.target.value)} placeholder={t.commentPlaceholder} style={{ ...INP, minHeight: 72, resize: "vertical" }} /></div>
       <div style={{ display: "flex", gap: 7 }}>
         <button onClick={save} style={PBTN}>{t.save}</button>
         <button onClick={onClose} style={SBTN}>{t.cancel}</button>
