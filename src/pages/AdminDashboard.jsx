@@ -171,6 +171,30 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
     return t.notSubmitted;
   };
 
+  const getAggregateMonthStatus = (y, m, empList) => {
+    const mk = monthKey(y, m);
+    const total = empList.length;
+    let submitted = 0, fillPctTotal = 0;
+    empList.forEach(emp => {
+      if ((allL[emp.id] || []).includes(mk)) submitted++;
+      fillPctTotal += getEmpMonthData(emp.id, y, m).pct;
+    });
+    const month = getAdminMonthStatus(y, m, { pct: 0, fill: 0, total: dim(y, m), wbyCo: {} }, []);
+    const unsubmitted = total - submitted;
+    const pct = total ? Math.round((submitted / total) * 100) : 0;
+    const avgFillPct = total ? Math.round(fillPctTotal / total) : 0;
+    return {
+      ...month,
+      totalEmployees: total,
+      submitted,
+      unsubmitted,
+      pct,
+      avgFillPct,
+      isOverdue: month.needsSubmission && unsubmitted > 0 && month.daysToDeadline < 0,
+      isDueSoon: month.needsSubmission && unsubmitted > 0 && month.daysToDeadline >= 0 && month.daysToDeadline <= 7
+    };
+  };
+
   const groupByDH = empList => {
     const g = {}; DH_COMPANIES.forEach(c => g[c] = []); g["__other"] = [];
     empList.forEach(e => { const k = DH_COMPANIES.includes(e.company) ? e.company : "__other"; g[k].push(e); });
@@ -208,6 +232,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const activeGroups = groupByDH(activeEmps);
   const filteredTravelGroups = groupByDH(filteredTravelEmps);
   const filteredTeamGroups = groupByDH(filteredTeamEmps);
+  const travelMonthOverview = Array.from({ length: 12 }, (_, m) => getAggregateMonthStatus(adminYr, m, filteredTravelEmps));
 
   return (
     <div style={{ fontFamily: "Inter,sans-serif", backgroundColor: C.grayL, minHeight: "100vh" }}>
@@ -239,7 +264,30 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
           <FilterBar companyValue={travelCompanyFilter} onCompanyChange={setTravelCompanyFilter} employeeValue={travelEmployeeFilter} onEmployeeChange={setTravelEmployeeFilter} />
           {activeEmps.length === 0 ? <Card><div style={{ textAlign: "center", color: C.gray, padding: 28, fontSize: 13 }}>{t.noE}</div></Card> :
             filteredTravelEmps.length === 0 ? <Card><div style={{ textAlign: "center", color: C.gray, padding: 28, fontSize: 13 }}>{t.noFilterResults}</div></Card> :
-            companyOptions.map(co => {
+            (<>
+            <Card style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, color: C.dark, marginBottom: 10 }}>{t.monthlySubmissionOverview}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8 }}>
+                {travelMonthOverview.map(mo => {
+                  const warn = mo.isOverdue || mo.isDueSoon;
+                  const color = mo.needsSubmission ? (warn ? C.red : mo.pct === 100 ? C.green : C.amber) : C.gray;
+                  const bg = mo.needsSubmission ? (warn ? C.redL : mo.pct === 100 ? C.greenL : C.amberL) : C.grayL;
+                  return (<div key={mo.mk} style={{ backgroundColor: bg, border: `1px solid ${warn ? "#ffb3bb" : C.border}`, borderRadius: 7, padding: "8px 9px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: C.dark }}>{monthLabel(mo.y, mo.m)}</span>
+                      {warn && <span style={{ fontSize: 9, fontWeight: 800, color: C.red }}>{mo.isOverdue ? t.overdue : t.dueSoon}</span>}
+                      {!mo.needsSubmission && <span style={{ fontSize: 9, fontWeight: 700, color: C.gray }}>{t.upcoming}</span>}
+                    </div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color }}>{mo.submitted}/{mo.totalEmployees} {t.submitted} · {mo.pct}%</div>
+                    <div style={{ height: 5, backgroundColor: C.white, borderRadius: 3, overflow: "hidden", marginTop: 5, marginBottom: 4 }}>
+                      <div style={{ width: `${mo.pct}%`, height: "100%", backgroundColor: color, borderRadius: 3 }} />
+                    </div>
+                    <div style={{ fontSize: 9, color: C.gray }}>{t.avgFill}: {mo.avgFillPct}%</div>
+                  </div>);
+                })}
+              </div>
+            </Card>
+            {companyOptions.map(co => {
               const list = filteredTravelGroups[co] || []; if (!list.length) return null;
               const label = companyLabel(co);
               return (<div key={co} style={{ marginBottom: 16 }}>
@@ -253,7 +301,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                   const months = Array.from({ length: 12 }, (_, m) => getAdminMonthStatus(adminYr, m, getEmpMonthData(emp.id, adminYr, m), lk));
                   const yrWbyCo = {}; months.forEach(({ wbyCo }) => Object.entries(wbyCo).forEach(([c, d]) => { yrWbyCo[c] = (yrWbyCo[c] || 0) + d; }));
                   const visibleMonths = months.filter(mo => mo.needsSubmission);
-                  const submittedMonths = months.filter(mo => mo.isLocked);
+                  const submittedMonths = visibleMonths.filter(mo => mo.isLocked);
                   const notSubmittedMonths = visibleMonths.filter(mo => !mo.isLocked);
                   const overdueMonths = months.filter(mo => mo.isOverdue);
                   const dueSoonMonths = months.filter(mo => mo.isDueSoon);
@@ -267,7 +315,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                         <button onClick={() => toggleEmp(emp.id)} style={{ fontWeight: 800, fontSize: 13, color: C.red, border: "none", backgroundColor: "transparent", cursor: "pointer", padding: 0, textAlign: "left" }}>
                           {expanded ? "▼" : "▶"} {dName(emp)}
                         </button>
-                        <span style={{ fontSize: 10, backgroundColor: C.greenL, color: C.green, padding: "1px 7px", borderRadius: 4, fontWeight: 700 }}>🔒 {submittedMonths.length}/{visibleMonths.length || 12} {t.submittedMonths}</span>
+                        <span style={{ fontSize: 10, backgroundColor: C.greenL, color: C.green, padding: "1px 7px", borderRadius: 4, fontWeight: 700 }}>🔒 {submittedMonths.length}/{visibleMonths.length} {t.submittedMonths}</span>
                         {overdueMonths.length > 0 && <span style={{ fontSize: 10, backgroundColor: C.redL, color: C.red, padding: "1px 7px", borderRadius: 4, fontWeight: 800 }}>⚠ {overdueMonths.length} {t.overdue}</span>}
                         {dueSoonMonths.length > 0 && <span style={{ fontSize: 10, backgroundColor: C.redL, color: C.red, padding: "1px 7px", borderRadius: 4, fontWeight: 800 }}>⚠ {dueSoonMonths.length} {t.dueWithin7}</span>}
                       </div>
@@ -277,7 +325,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                       </div>
                     </div>
                     <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8 }}>
-                      {[[t.submittedProgress, submittedPct, `${submittedMonths.length}/${visibleMonths.length || 12} ${t.monthsShort}`, C.green], [t.fillProgress, fillPct, `${filledDays}/${totalDays || 0} ${lang === "de" ? "Tage" : "days"}`, fillPct === 100 ? C.green : fillPct > 60 ? C.amber : C.red]].map(([label, value, detail, color]) => (
+                      {[[t.submittedProgress, submittedPct, `${submittedMonths.length}/${visibleMonths.length} ${t.monthsShort}`, C.green], [t.fillProgress, fillPct, `${filledDays}/${totalDays || 0} ${lang === "de" ? "Tage" : "days"}`, fillPct === 100 ? C.green : fillPct > 60 ? C.amber : C.red]].map(([label, value, detail, color]) => (
                         <div key={label}>
                           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.gray, marginBottom: 3 }}><span style={{ fontWeight: 700 }}>{label}</span><span>{detail} · {value}%</span></div>
                           <div style={{ height: 5, backgroundColor: C.border, borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${value}%`, height: "100%", backgroundColor: color, borderRadius: 3 }} /></div>
@@ -327,6 +375,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                 })}
               </div>);
             })}
+            </>)}
         </>}
 
         {view === "comp" && <>

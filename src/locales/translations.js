@@ -63,7 +63,8 @@ export const T = {
     submitted: "Eingereicht", notSubmitted: "Nicht eingereicht", submittedMonths: "eingereichte Monate",
     notSubmittedMonths: "Nicht eingereichte Monate", submittedProgress: "Einreichungsstatus", fillProgress: "Ausfüllstatus",
     overdue: "Überfällig", dueSoon: "Frist naht", dueWithin7: "Frist ≤7 Tage", upcoming: "Zukünftig",
-    monthsShort: "Monate", none: "Keine",
+    monthsShort: "Monate", none: "Keine", monthlySubmissionOverview: "Monatliche Einreichungsübersicht",
+    avgFill: "Ø ausgefüllt",
     t90: "90 Tage – Mögliche Lohnsteuer-/SV-Pflicht", t183: "183 Tage – Mögliche Begründung steuerlicher Ansässigkeit (DBA)",
     taxN: "Keine steuerliche Beratung.", taxI: "ℹ Steuerliche Grenzwerte"
   },
@@ -129,7 +130,8 @@ export const T = {
     submitted: "Submitted", notSubmitted: "Not submitted", submittedMonths: "submitted months",
     notSubmittedMonths: "Not submitted months", submittedProgress: "Submission status", fillProgress: "Completion status",
     overdue: "Overdue", dueSoon: "Due soon", dueWithin7: "Deadline ≤7 days", upcoming: "Upcoming",
-    monthsShort: "months", none: "None",
+    monthsShort: "months", none: "None", monthlySubmissionOverview: "Monthly Submission Overview",
+    avgFill: "Avg. filled",
     t90: "90 days – Possible payroll tax / SSC obligation", t183: "183 days – Possible tax residency abroad (DTA)",
     taxN: "Not a substitute for tax advice.", taxI: "ℹ Tax Thresholds"
   }
