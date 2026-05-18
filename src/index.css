@@ -3,42 +3,6 @@ body {
   font-family: Arial, sans-serif;
 }
 
-@keyframes orbit1 {
-  from {
-    transform: rotate(0deg) translateX(56px) rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg) translateX(56px) rotate(-360deg);
-  }
-}
-
-@keyframes orbit2 {
-  from {
-    transform: rotate(120deg) translateX(56px) rotate(-120deg);
-  }
-  to {
-    transform: rotate(480deg) translateX(56px) rotate(-480deg);
-  }
-}
-
-@keyframes orbit3 {
-  from {
-    transform: rotate(240deg) translateX(56px) rotate(-240deg);
-  }
-  to {
-    transform: rotate(600deg) translateX(56px) rotate(-600deg);
-  }
-}
-
-@keyframes globespin {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-360px);
-  }
-}
-
 @keyframes spin {
   to {
     transform: rotate(360deg);

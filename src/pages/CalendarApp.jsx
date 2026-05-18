@@ -28,6 +28,7 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
   const [ldg, setLdg] = useState(true);
   const [lockErr, setLockErr] = useState(null);
   const [lockConfirm, setLockConfirm] = useState(false);
+  const [unlockConfirm, setUnlockConfirm] = useState(false);
   const [reminder, setReminder] = useState(null);
   const [remDis, setRemDis] = useState(false);
   const [legendTip, setLegendTip] = useState(null);
@@ -115,18 +116,32 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
 
   const tryLockMo = () => { const d = dim(yr, mo), miss = []; for (let i = 1; i <= d; i++) if (!entries[dk(yr, mo, i)]) miss.push(i); if (miss.length) { setLockErr({ missing: miss }); return; } setLockConfirm(true); };
   const doLockMo = () => { saveL([...locked, mkey]); setLockConfirm(false); notify(`${MO[lang][mo]} ${yr} ${t.locked} 🔒`); };
-  const unlockAdmin = async () => { if (adminUnlock) await adminUnlock(mkey); saveL(locked.filter(m => m !== mkey)); notify(`${MO[lang][mo]} ${yr} ${t.muOK}`); };
+  const unlockAdmin = async () => { if (adminUnlock) await adminUnlock(mkey); saveL(locked.filter(m => m !== mkey)); setUnlockConfirm(false); notify(`${MO[lang][mo]} ${yr} ${t.muOK}`); };
   const exportCSV = () => { const rows = [[lang === "de" ? "Datum" : "Date", "Tag/Day", lang === "de" ? "Land" : "Country", lang === "de" ? "Aktivität" : "Activity", "Notes"]]; Object.keys(entries).filter(k => k.startsWith(yr.toString())).sort().forEach(k => { const e = entries[k], dt = new Date(k); rows.push([k, WDN[lang][getDOW(dt.getFullYear(), dt.getMonth(), dt.getDate())], e.period === "split" ? `${e.amL}/${e.pmL}` : e.loc, e.period === "split" ? `${actMap[e.amA]?.label}/${actMap[e.pmA]?.label}` : actMap[e.act]?.label, e.notes || ""]); }); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\uFEFF" + rows.map(r => r.join(";")).join("\n")], { type: "text/csv;charset=utf-8;" })); a.download = `${t.app}_${yr}.csv`; a.click(); };
 
   const unfilledPastMonths = useMemo(() => {
     const now = new Date(), result = [];
     for (let y = 2026; y <= now.getFullYear(); y++) {
       for (let m = 0; m < 12; m++) {
-        if (y > now.getFullYear() || (y === now.getFullYear() && m > now.getMonth())) continue;
+        if (y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth())) continue;
         const d = dim(y, m); let fill = 0;
         for (let i = 1; i <= d; i++) if (entries[dk(y, m, i)]) fill++;
         const mk = `${y}-${String(m + 1).padStart(2, "0")}`;
         if (fill < d && !locked.includes(mk)) result.push({ y, m, fill, total: d, mk });
+      }
+    }
+    return result;
+  }, [entries, locked]);
+
+  const completedUnlockedMonths = useMemo(() => {
+    const now = new Date(), result = [];
+    for (let y = 2026; y <= now.getFullYear(); y++) {
+      for (let m = 0; m < 12; m++) {
+        if (y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth())) continue;
+        const d = dim(y, m); let fill = 0;
+        for (let i = 1; i <= d; i++) if (entries[dk(y, m, i)]) fill++;
+        const mk = `${y}-${String(m + 1).padStart(2, "0")}`;
+        if (fill === d && !locked.includes(mk)) result.push({ y, m, total: d, mk });
       }
     }
     return result;
@@ -161,22 +176,34 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
     <div style={{ fontFamily: "Inter,sans-serif", backgroundColor: C.grayL, minHeight: "100vh" }} onClick={() => setLegendTip(null)}>
       {notif && <Notif msg={notif} />}
       {lockConfirm && <ConfirmModal title={t.cfmLockTitle} message={`${MO[lang][mo]} ${yr} – ${t.cfmLockMsg}`} onConfirm={doLockMo} onCancel={() => setLockConfirm(false)} confirmText={t.yes} cancelText={t.cancel} isDanger={false} />}
+      {unlockConfirm && <ConfirmModal title={t.unlock} message={`${MO[lang][mo]} ${yr} – ${lang === "de" ? "Diesen Monat entsperren?" : "Unlock this month?"}`} onConfirm={unlockAdmin} onCancel={() => setUnlockConfirm(false)} confirmText={t.yes} cancelText={t.cancel} isDanger={false} />}
       <NavBar lang={lang} setLang={setLang} t={t} sub={(empName || dName(user)) + (readOnly ? ` ${t.ro}` : "")} logout={!readOnly ? logout : null} onBack={onBack}>
         {tabs.map(([v, l]) => <NBtn key={v} active={view === v} onClick={() => setView(v)}>{l}</NBtn>)}
       </NavBar>
       {reminder && !remDis && <div style={{ backgroundColor: C.amber, color: C.white, padding: "9px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}><span style={{ fontSize: 12, fontWeight: 700 }}>{t.remBan} <strong>{MO[lang][reminder.month]} {reminder.year}</strong> {t.remBanS} ({reminder.missing} {lang === "de" ? "Tage" : "days"}){reminder.msg && ` – ${reminder.msg}`}</span><button onClick={() => setRemDis(true)} style={{ padding: "3px 9px", borderRadius: 5, fontSize: 11, fontWeight: 700, border: "1px solid rgba(255,255,255,0.4)", backgroundColor: "transparent", color: C.white, cursor: "pointer" }}>{t.remDis}</button></div>}
 
       {view === "dash" && <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
-        <h2 style={{ fontWeight: 800, fontSize: 18, color: C.dark, marginBottom: 12 }}>👋 {lang === "de" ? `Hallo, Hero ${dName(user).split(" ")[0]}!` : `Hi, Hero ${dName(user).split(" ")[0]}!`}</h2>
+        <h2 style={{ fontWeight: 800, fontSize: 18, color: C.dark, marginBottom: 12 }}>{lang === "de" ? `Hallo, ${dName(user).split(" ")[0]}!` : `Hi, ${dName(user).split(" ")[0]}!`}</h2>
         <Card style={{ backgroundColor: C.blueL, borderColor: "#BFDBFE", marginBottom: 12 }}>
           <div style={{ fontWeight: 700, fontSize: 12, color: C.blue, marginBottom: 4 }}>ℹ️ {lang === "de" ? "Frist zum Ausfüllen" : "Submission Deadline"}</div>
           <div style={{ fontSize: 12, color: C.dark, lineHeight: 1.6 }}>{lang === "de" ? "Bitte füllen Sie Ihren Kalender aus und sperren Sie jeden Monat bis spätestens am 3. des Folgemonats." : "Please complete your calendar and lock each month by the 3rd of the following month at the latest."}</div>
         </Card>
         <Card>
           <div style={{ fontWeight: 800, fontSize: 14, color: C.dark, marginBottom: 8 }}>⚡ {t.tasks}</div>
-          {unfilledPastMonths.length === 0
+          {completedUnlockedMonths.length > 0 && <div style={{ marginBottom: 10 }}>
+            {completedUnlockedMonths.map(({ y, m, total }) => (
+              <div key={`${y}-${m}`} onClick={() => { setYr(y); setMo(m); setView("cal"); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 7, backgroundColor: C.amberL, border: `1px solid #fde68a`, marginBottom: 5, cursor: "pointer" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 14 }}>⚠️</span>
+                  <div><div style={{ fontWeight: 700, fontSize: 12, color: "#92400E" }}>{MO[lang][m]} {y}</div><div style={{ fontSize: 10, color: "#92400E" }}>{lang === "de" ? `Vollständig ausgefüllt (${total}/${total}), aber noch nicht gesperrt.` : `Fully completed (${total}/${total}) but not locked yet.`}</div></div>
+                </div>
+                <span style={{ fontSize: 11, color: "#92400E", fontWeight: 700 }}>→ {lang === "de" ? "Sperren" : "Lock"}</span>
+              </div>
+            ))}
+          </div>}
+          {unfilledPastMonths.length === 0 && completedUnlockedMonths.length === 0
             ? <div style={{ color: C.green, fontWeight: 700, fontSize: 13 }}>✓ {t.noTasks}</div>
-            : <>
+            : unfilledPastMonths.length > 0 && <>
               <div style={{ fontSize: 12, color: C.gray, marginBottom: 8 }}>{t.taskHint}</div>
               {unfilledPastMonths.map(({ y, m, fill, total }) => (
                 <div key={`${y}-${m}`} onClick={() => { setYr(y); setMo(m); setView("cal"); }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 7, backgroundColor: C.redL, border: `1px solid #ffb3bb`, marginBottom: 5, cursor: "pointer" }}>
@@ -208,7 +235,7 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
         </div>
         {lockErr && <div style={{ backgroundColor: C.redL, border: `1px solid #ffb3bb`, borderRadius: 8, padding: "10px 13px", marginBottom: 10 }}><div style={{ fontWeight: 700, fontSize: 12, color: C.red }}>{t.lockErr}</div><div style={{ fontSize: 11, color: C.redD, marginTop: 2 }}>{t.lockErrS} {lockErr.missing.slice(0, 25).join(", ")}{lockErr.missing.length > 25 ? "…" : ""}</div><button onClick={() => setLockErr(null)} style={{ marginTop: 4, fontSize: 10, border: `1px solid ${C.border}`, backgroundColor: C.white, borderRadius: 5, padding: "2px 8px", cursor: "pointer", color: C.gray }}>✕</button></div>}
         {!readOnly && <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}><TB onClick={() => setShowMiss(s => !s)} active={showMiss}>⚠ {showMiss ? t.hideM : t.showM}</TB><TB onClick={() => setBulk(true)}>📋 {t.bulk}</TB><TB onClick={tryLockMo} disabled={isLk}>{isLk ? `🔒 ${t.locked}` : `🔒 ${t.lock}`}</TB><TB onClick={exportCSV}>⬇ CSV</TB>{sel.length > 0 && <><button onClick={openModal} style={{ padding: "4px 11px", borderRadius: 6, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer" }}>✏ {sel.length} {t.editD}</button><TB onClick={() => setSel([])}>✕ {t.clearS}</TB></>}</div>}
-        {readOnly && isLk && adminUnlock && <div style={{ marginBottom: 8 }}><button onClick={unlockAdmin} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer" }}>🔓 {t.unlock} {MO[lang][mo]} {yr}</button></div>}
+        {readOnly && isLk && adminUnlock && <div style={{ marginBottom: 8 }}><button onClick={() => setUnlockConfirm(true)} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer" }}>🔓 {t.unlock} {MO[lang][mo]} {yr}</button></div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3, marginBottom: 3 }}>{DY[lang].map((d, i) => <div key={d} style={{ textAlign: "center", fontSize: 10, fontWeight: 700, color: i >= 5 ? C.gray : "#374151", padding: "2px 0" }}>{d}</div>)}</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3 }}>{renderCal()}</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px", marginTop: 14 }}>
@@ -294,21 +321,6 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
               ))}</tbody>
             </table>
           </Card>
-          <Card>
-            <div style={{ fontWeight: 700, fontSize: 13, color: C.dark, marginBottom: 10 }}>💼 {t.workDaysCo} {yr}</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-              <thead><tr style={{ borderBottom: `2px solid ${C.border}` }}>
-                <th style={{ textAlign: "left", padding: "4px 6px", fontSize: 10, color: C.gray, fontWeight: 700 }}>{lang === "de" ? "Land" : "Country"}</th>
-                <th style={{ textAlign: "center", padding: "4px 6px", fontSize: 10, color: C.gray, fontWeight: 700 }}>{lang === "de" ? "Arbeitstage" : "Working Days"}</th>
-              </tr></thead>
-              <tbody>{Object.entries(yearSum).filter(([, { work }]) => work > 0).sort((a, b) => b[1].work - a[1].work).map(([code, { work }]) => (
-                <tr key={code} style={{ borderBottom: `1px solid ${C.grayL}` }}>
-                  <td style={{ padding: "4px 6px" }}><span style={{ fontWeight: 700, color: C.dark }}>{code}</span><span style={{ color: C.gray, marginLeft: 4, fontSize: 10 }}>{ctryName(code, lang)}</span></td>
-                  <td style={{ textAlign: "center", padding: "4px 6px", fontWeight: 700, color: C.blue }}>{work}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </Card>
         </>}
       </div>}
 
@@ -319,7 +331,7 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
             { icon: "✏️", title: t.instrFill, desc: t.instrFillDesc },
             { icon: "📅", title: t.instrDeadline, desc: t.instrDeadlineDesc },
             { icon: "🏷️", title: t.instrActs, desc: t.instrActsDesc },
-            { icon: "🌅", title: lang === "de" ? "VM / NM Split" : "AM / PM Split", desc: lang === "de" ? "Ein Tag kann in Vormittag und Nachmittag aufgeteilt werden – z.B. wenn Sie morgens im Büro in Deutschland und nachmittags auf Dienstreise in Frankreich waren." : "A day can be split into morning and afternoon – e.g. if you worked in the office in Germany in the morning and were on a business trip to France in the afternoon." },
+            { icon: "🌅", title: "Day Split", desc: lang === "de" ? "Ein Tag kann in Vormittag und Nachmittag aufgeteilt werden – z.B. wenn Sie morgens im Büro in Deutschland und nachmittags auf Dienstreise in Frankreich waren." : "A day can be split into morning and afternoon – e.g. if you worked in the office in Germany in the morning and were on a business trip to France in the afternoon." },
             { icon: "🔒", title: t.instrLock, desc: lang === "de" ? "Sobald alle Tage ausgefüllt sind, sperren Sie den Monat. ⚠️ Nach dem Sperren sind keine Änderungen mehr möglich. Nur ein Administrator kann entsperren." : "Once all days are filled in, lock the month. ⚠️ After locking, no further changes can be made. Only an administrator can unlock." },
           ].map((item, i) => (
             <div key={i} style={{ display: "flex", gap: 12, marginBottom: 14, padding: "10px 12px", backgroundColor: C.grayL, borderRadius: 8 }}>
