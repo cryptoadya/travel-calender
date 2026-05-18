@@ -123,7 +123,7 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
     const now = new Date(), result = [];
     for (let y = 2026; y <= now.getFullYear(); y++) {
       for (let m = 0; m < 12; m++) {
-        if (y > now.getFullYear() || (y === now.getFullYear() && m > now.getMonth())) continue;
+        if (y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth())) continue;
         const d = dim(y, m); let fill = 0;
         for (let i = 1; i <= d; i++) if (entries[dk(y, m, i)]) fill++;
         const mk = `${y}-${String(m + 1).padStart(2, "0")}`;
