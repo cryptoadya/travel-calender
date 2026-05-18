@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { C } from '../constants/colors';
-import { DH_COMPANIES, AVAIL_YEARS } from '../constants/config';
+import { DH_COMPANIES, AVAIL_YEARS, WORK_ACTS } from '../constants/config';
 import { MOS } from '../locales/translations';
-import { getDOW, isWE, dk, dim } from '../utils/dateUtils';
+import { dk, dim } from '../utils/dateUtils';
 import { dName, transferLabel, ctryName } from '../utils/formatUtils';
 import { calcRangeSummary } from '../utils/statsUtils';
 import { genInvite } from '../utils/authUtils';
@@ -135,9 +135,9 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
         fill++; const ent = e[k];
         if (ent.period === "split") {
           [[ent.amL || "DE", ent.amA], [ent.pmL || "DE", ent.pmA]].forEach(([l, a]) => {
-            if (new Set(["work", "homeoffice", "travel", "training"]).has(a)) { wbyCo[l] = (wbyCo[l] || 0) + 0.5; }
+            if (WORK_ACTS.has(a)) { wbyCo[l] = (wbyCo[l] || 0) + 0.5; }
           });
-        } else if (new Set(["work", "homeoffice", "travel", "training"]).has(ent.act)) {
+        } else if (WORK_ACTS.has(ent.act)) {
           wbyCo[ent.loc || "DE"] = (wbyCo[ent.loc || "DE"] || 0) + 1;
         }
       }
