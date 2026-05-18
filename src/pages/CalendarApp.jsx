@@ -5,6 +5,7 @@ import { getActs, MO, MOS, DY, WDN, ACT_IDS, ACT_DESC } from '../locales/transla
 import { getDOW, isWE, fdow, dk, dim } from '../utils/dateUtils';
 import { ctryName, dName } from '../utils/formatUtils';
 import { calcYearSummary, calcMonthStats } from '../utils/statsUtils';
+import { normalizeReminderSettings, renderReminderMessage } from '../utils/reminderUtils';
 
 import { NavBar, Card, Overlay, MH } from '../components/ui/Layout';
 import { Ctr, Spin, Notif } from '../components/ui/Feedback';
@@ -29,7 +30,7 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
   const [lockErr, setLockErr] = useState(null);
   const [lockConfirm, setLockConfirm] = useState(false);
   const [unlockConfirm, setUnlockConfirm] = useState(false);
-  const [reminder, setReminder] = useState(null);
+  const [remSettings, setRemSettings] = useState(normalizeReminderSettings());
   const [remDis, setRemDis] = useState(false);
   const [legendTip, setLegendTip] = useState(null);
   const [me, setMe] = useState({ loc: "DE", act: "work", period: "full", amL: "DE", pmL: "DE", amA: "work", pmA: "work", notes: "", ov: false });
@@ -69,16 +70,8 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
       if (!readOnly) {
         try {
           const r = await window.storage.get("rem-settings", true);
-          if (r) {
-            const rem = JSON.parse(r.value);
-            if (rem.enabled && today.getDate() >= rem.day) {
-              const pm = today.getMonth() === 0 ? 11 : today.getMonth() - 1, py = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear(), d = dim(py, pm);
-              let miss = 0;
-              for (let i = 1; i <= d; i++) if (!e[dk(py, pm, i)]) miss++;
-              if (miss > 0) setReminder({ month: pm, year: py, missing: miss, msg: rem.msg });
-            }
-          }
-        } catch (x) { }
+          setRemSettings(normalizeReminderSettings(r ? JSON.parse(r.value) : null));
+        } catch (x) { setRemSettings(normalizeReminderSettings()); }
       }
       setLdg(false);
     })();
@@ -92,6 +85,24 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
   const totalD = useMemo(() => dim(yr, mo), [yr, mo]);
   const filledD = useMemo(() => { let c = 0; for (let i = 1; i <= dim(yr, mo); i++) if (entries[dk(yr, mo, i)]) c++; return c; }, [yr, mo, entries]);
   const pct = Math.round((filledD / Math.max(totalD, 1)) * 100);
+  const reminder = useMemo(() => {
+    if (readOnly || !remSettings.enabled || today.getDate() < remSettings.firstReminderDay) return null;
+    const cy = today.getFullYear(), cm = today.getMonth();
+    const total = dim(cy, cm);
+    let missing = 0;
+    for (let i = 1; i <= total; i++) if (!entries[dk(cy, cm, i)]) missing++;
+    const mk = `${cy}-${String(cm + 1).padStart(2, "0")}`;
+    const notLocked = !locked.includes(mk);
+    if (missing === 0 && !notLocked) return null;
+    return {
+      month: cm,
+      year: cy,
+      missing,
+      notLocked,
+      strong: today.getDate() >= remSettings.dailyReminderStartDay,
+      msg: renderReminderMessage(remSettings.msg, [`${MO[lang][cm]} ${cy}`], t.defaultReminderMsg)
+    };
+  }, [readOnly, remSettings, today, entries, locked, lang, t.defaultReminderMsg]);
   const prevMo = () => { setSel([]); mo === 0 ? (setMo(11), setYr(y => y - 1)) : setMo(m => m - 1); };
   const nextMo = () => { setSel([]); mo === 11 ? (setMo(0), setYr(y => y + 1)) : setMo(m => m + 1); };
   const clickDay = d => { if (isLk || readOnly) return; const k = dk(yr, mo, d); setSel(s => s.includes(k) ? s.filter(x => x !== k) : [...s, k]); };
@@ -180,10 +191,21 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
       <NavBar lang={lang} setLang={setLang} t={t} sub={(empName || dName(user)) + (readOnly ? ` ${t.ro}` : "")} logout={!readOnly ? logout : null} onBack={onBack}>
         {tabs.map(([v, l]) => <NBtn key={v} active={view === v} onClick={() => setView(v)}>{l}</NBtn>)}
       </NavBar>
-      {reminder && !remDis && <div style={{ backgroundColor: C.amber, color: C.white, padding: "9px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}><span style={{ fontSize: 12, fontWeight: 700 }}>{t.remBan} <strong>{MO[lang][reminder.month]} {reminder.year}</strong> {t.remBanS} ({reminder.missing} {lang === "de" ? "Tage" : "days"}){reminder.msg && ` – ${reminder.msg}`}</span><button onClick={() => setRemDis(true)} style={{ padding: "3px 9px", borderRadius: 5, fontSize: 11, fontWeight: 700, border: "1px solid rgba(255,255,255,0.4)", backgroundColor: "transparent", color: C.white, cursor: "pointer" }}>{t.remDis}</button></div>}
-
       {view === "dash" && <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
         <h2 style={{ fontWeight: 800, fontSize: 18, color: C.dark, marginBottom: 12 }}>{lang === "de" ? `Hallo, ${dName(user).split(" ")[0]}!` : `Hi, ${dName(user).split(" ")[0]}!`}</h2>
+        {reminder && !remDis && <div style={{ backgroundColor: reminder.strong ? C.red : C.amber, color: C.white, padding: reminder.strong ? "11px 14px" : "9px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", borderRadius: 8, marginBottom: 12, border: reminder.strong ? `2px solid ${C.redD}` : "none" }}>
+          <span style={{ fontSize: 12, fontWeight: 700 }}>
+            {reminder.strong && <span style={{ marginRight: 8 }}>{t.strongerReminderLabel}</span>}
+            {reminder.msg}
+            <span style={{ marginLeft: 8, fontWeight: 800 }}>
+              {[
+                reminder.missing > 0 ? t.reminderIssueMissingDays.replace("{count}", reminder.missing) : null,
+                reminder.notLocked ? t.reminderIssueNotLocked : null
+              ].filter(Boolean).join(" + ")}
+            </span>
+          </span>
+          <button onClick={() => setRemDis(true)} style={{ padding: "3px 9px", borderRadius: 5, fontSize: 11, fontWeight: 700, border: "1px solid rgba(255,255,255,0.4)", backgroundColor: "transparent", color: C.white, cursor: "pointer" }}>{t.remDis}</button>
+        </div>}
         <Card style={{ backgroundColor: C.blueL, borderColor: "#BFDBFE", marginBottom: 12 }}>
           <div style={{ fontWeight: 700, fontSize: 12, color: C.blue, marginBottom: 4 }}>ℹ️ {lang === "de" ? "Frist zum Ausfüllen" : "Submission Deadline"}</div>
           <div style={{ fontSize: 12, color: C.dark, lineHeight: 1.6 }}>{lang === "de" ? "Bitte füllen Sie Ihren Kalender aus und sperren Sie jeden Monat bis spätestens am 3. des Folgemonats." : "Please complete your calendar and lock each month by the 3rd of the following month at the latest."}</div>

@@ -6,6 +6,7 @@ import { getDOW, isWE, dk, dim } from '../utils/dateUtils';
 import { dName, transferLabel, ctryName } from '../utils/formatUtils';
 import { calcRangeSummary } from '../utils/statsUtils';
 import { genInvite } from '../utils/authUtils';
+import { normalizeReminderSettings } from '../utils/reminderUtils';
 
 import { db } from '../lib/firebase';
 import { collection, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -29,7 +30,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const [allL, setAllL] = useState({});
   const [notif, setNotif] = useState(null);
   const [view, setView] = useState("travel");
-  const [rem, setRem] = useState({ enabled: true, day: 25, msg: "" });
+  const [rem, setRem] = useState(normalizeReminderSettings());
   const [exportEmp, setExportEmp] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [invitePreview, setInvitePreview] = useState(null);
@@ -69,7 +70,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
     } catch (e) {
       console.error(e);
     }
-    try { const r = await window.storage.get("rem-settings", true); if (r) setRem(JSON.parse(r.value)); } catch (e) { }
+    try { const r = await window.storage.get("rem-settings", true); setRem(normalizeReminderSettings(r ? JSON.parse(r.value) : null)); } catch (e) { setRem(normalizeReminderSettings()); }
   };
 
   useEffect(() => { loadAll(); }, [viewEmp]);
@@ -123,7 +124,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   };
 
   const saveRem = async () => {
-    try { await window.storage.set("rem-settings", JSON.stringify(rem), true); notify(t.remOK); } catch (e) { }
+    try { await window.storage.set("rem-settings", JSON.stringify(normalizeReminderSettings(rem)), true); notify(t.remOK); } catch (e) { }
   };
 
   const getEmpMonthData = (uid, y, m) => {
@@ -195,6 +196,25 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
     };
   };
 
+  const getReminderIssueText = (missing, notLocked) => [
+    missing > 0 ? t.reminderIssueMissingDays.replace("{count}", missing) : null,
+    notLocked ? t.reminderIssueNotLocked : null
+  ].filter(Boolean).join(" + ");
+
+  const getAdminReminderWarnings = empList => {
+    const today = new Date();
+    if (!rem.enabled || today.getDate() < rem.adminAlertDay) return [];
+    const m = today.getMonth() === 0 ? 11 : today.getMonth() - 1;
+    const y = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear();
+    const mk = monthKey(y, m);
+    return empList.map(emp => {
+      const data = getEmpMonthData(emp.id, y, m);
+      const missing = data.total - data.fill;
+      const notLocked = !(allL[emp.id] || []).includes(mk);
+      return { emp, y, m, missing, notLocked };
+    }).filter(row => row.missing > 0 || row.notLocked);
+  };
+
   const groupByDH = empList => {
     const g = {}; DH_COMPANIES.forEach(c => g[c] = []); g["__other"] = [];
     empList.forEach(e => { const k = DH_COMPANIES.includes(e.company) ? e.company : "__other"; g[k].push(e); });
@@ -233,6 +253,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const filteredTravelGroups = groupByDH(filteredTravelEmps);
   const filteredTeamGroups = groupByDH(filteredTeamEmps);
   const travelMonthOverview = Array.from({ length: 12 }, (_, m) => getAggregateMonthStatus(adminYr, m, filteredTravelEmps));
+  const adminReminderWarnings = getAdminReminderWarnings(filteredTravelEmps);
 
   return (
     <div style={{ fontFamily: "Inter,sans-serif", backgroundColor: C.grayL, minHeight: "100vh" }}>
@@ -265,6 +286,22 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
           {activeEmps.length === 0 ? <Card><div style={{ textAlign: "center", color: C.gray, padding: 28, fontSize: 13 }}>{t.noE}</div></Card> :
             filteredTravelEmps.length === 0 ? <Card><div style={{ textAlign: "center", color: C.gray, padding: 28, fontSize: 13 }}>{t.noFilterResults}</div></Card> :
             (<>
+            {rem.enabled && new Date().getDate() >= rem.adminAlertDay && <Card style={{ marginBottom: 12, backgroundColor: adminReminderWarnings.length ? C.redL : C.greenL, borderColor: adminReminderWarnings.length ? "#ffb3bb" : "#86efac" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: adminReminderWarnings.length ? 8 : 0, flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 800, fontSize: 13, color: adminReminderWarnings.length ? C.red : C.green }}>{t.adminReminderWarnings}</div>
+                <div style={{ fontSize: 10, color: C.gray }}>{monthLabel(adminReminderWarnings[0]?.y ?? (new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear()), adminReminderWarnings[0]?.m ?? (new Date().getMonth() === 0 ? 11 : new Date().getMonth() - 1))}</div>
+              </div>
+              {adminReminderWarnings.length === 0 ? <div style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>{t.noReminderWarnings}</div> :
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 6 }}>
+                  {adminReminderWarnings.map(({ emp, y, m, missing, notLocked }) => (
+                    <div key={emp.id} style={{ backgroundColor: C.white, border: `1px solid #ffb3bb`, borderRadius: 6, padding: "7px 9px" }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: C.dark }}>{dName(emp)}</div>
+                      <div style={{ fontSize: 10, color: C.gray, marginTop: 2 }}>{monthLabel(y, m)}</div>
+                      <div style={{ fontSize: 10, color: C.red, fontWeight: 800, marginTop: 3 }}>{getReminderIssueText(missing, notLocked)}</div>
+                    </div>
+                  ))}
+                </div>}
+            </Card>}
             <Card style={{ marginBottom: 12 }}>
               <div style={{ fontWeight: 800, fontSize: 13, color: C.dark, marginBottom: 10 }}>{t.monthlySubmissionOverview}</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8 }}>
@@ -486,9 +523,18 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
 
         {view === "sets" && <Card>
           <h3 style={{ fontWeight: 800, fontSize: 15, color: C.dark, marginTop: 0, marginBottom: 16 }}>{t.remT}</h3>
+          <div style={{ marginBottom: 14, backgroundColor: C.blueL, border: `1px solid #BFDBFE`, borderRadius: 8, padding: "9px 11px", fontSize: 12, color: C.blue, fontWeight: 700 }}>{t.mvpReminderNote}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}><ToggleSW on={rem.enabled} onToggle={() => setRem(r => ({ ...r, enabled: !r.enabled }))} size={22} /><span style={{ fontSize: 13, fontWeight: 600, color: C.dark }}>{t.remOn}</span></div>
-          <div style={{ marginBottom: 11 }}><FLbl>{t.remDay}</FLbl><div style={{ display: "flex", alignItems: "center", gap: 8 }}><input type="number" min={1} max={28} value={rem.day} onChange={e => setRem(r => ({ ...r, day: parseInt(e.target.value) || 1 }))} style={{ ...INP, width: 80 }} /><span style={{ fontSize: 12, color: C.gray }}>{lang === "de" ? `Jeden ${rem.day}. des Monats` : `Every ${rem.day}th`}</span></div></div>
-          <div style={{ marginBottom: 12 }}><FLbl>{t.remMsg}</FLbl><input value={rem.msg} onChange={e => setRem(r => ({ ...r, msg: e.target.value }))} placeholder={t.remMsgH} style={INP} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10, marginBottom: 12 }}>
+            {[
+              ["firstReminderDay", t.firstReminderDay],
+              ["dailyReminderStartDay", t.dailyReminderStartDay],
+              ["adminAlertDay", t.adminAlertDay]
+            ].map(([key, label]) => (
+              <div key={key}><FLbl>{label}</FLbl><input type="number" min={1} max={31} value={rem[key]} onChange={e => setRem(r => ({ ...r, [key]: parseInt(e.target.value) || 1 }))} style={{ ...INP, width: 90 }} /></div>
+            ))}
+          </div>
+          <div style={{ marginBottom: 12 }}><FLbl>{t.remMsg}</FLbl><input value={rem.msg} onChange={e => setRem(r => ({ ...r, msg: e.target.value }))} placeholder={t.defaultReminderMsg} style={INP} /></div>
           <button onClick={saveRem} style={PBTN}>{t.save}</button>
         </Card>}
       </div>
