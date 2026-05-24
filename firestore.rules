@@ -15,9 +15,11 @@ service cloud.firestore {
 
     // User profiles
     match /users/{uid} {
-      allow read: if request.auth != null;
-      // Evaluate isOwner first so isAdmin() doesn't throw if doc doesn't exist yet
-      allow write: if (request.auth != null && request.auth.uid == uid) || isAdmin();
+      allow read: if isOwner(uid) || isAdmin();
+      // Role and admin-managed profile fields must not be self-writable.
+      // Client-side admin codes are not a security boundary; only admins may
+      // create, update, or delete profile documents.
+      allow write: if isAdmin();
     }
 
     // Calendar entries and locked months
