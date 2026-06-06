@@ -1,4 +1,4 @@
-import { C } from '../constants/colors';
+import { C } from '../constants/colors.js';
 
 export const T = {
   de: {

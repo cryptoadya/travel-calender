@@ -1,8 +1,8 @@
-import { getActs, T, WDN } from '../locales/translations';
-import { WORK_ACTS } from '../constants/config';
-import { isWE, dk, fmtDate, getDOW } from './dateUtils';
-import { dName, escX } from './formatUtils';
-import { getSubmittedStatusForDate } from './monthStatus';
+import { getActs, T, WDN } from '../locales/translations.js';
+import { WORK_ACTS } from '../constants/config.js';
+import { isWE, dk, fmtDate, getDOW } from './dateUtils.js';
+import { dName, escX } from './formatUtils.js';
+import { getSubmittedStatusForDate } from './monthStatus.js';
 
 export function calcCountrySummary(entries, fromDate, toDate) {
   const summary = {};
@@ -74,6 +74,14 @@ const makeDailyRows = (entries, fromDate, toDate, lang, lockedMonths = []) => {
     });
   }
 
+  return rows;
+};
+
+export const buildCsvRows = (entries, fromDate, toDate, lang, lockedMonths = []) => {
+  const rows = [[lang === "de" ? "Datum" : "Date", "Submitted", "Tag/Day", lang === "de" ? "Land" : "Country", lang === "de" ? "Aktivität" : "Activity", "Notes", "Status"]];
+  makeDailyRows(entries, fromDate, toDate, lang, lockedMonths).forEach(row => {
+    rows.push([row.date, row.submitted, row.day, row.country, row.activity, row.notes, row.flag]);
+  });
   return rows;
 };
 

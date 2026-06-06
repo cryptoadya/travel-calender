@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { C } from '../constants/colors';
 import { AVAIL_YEARS } from '../constants/config';
-import { getActs, MO, MOS, DY, WDN, ACT_IDS, ACT_DESC } from '../locales/translations';
-import { getDOW, isWE, fdow, dk, dim } from '../utils/dateUtils';
-import { deriveMonthStatus, getMissingDays, getMonthKey, getSubmittedStatusForDate, isMonthLockableByDate, parseLocalDate, selectedRangeOverlapsLockedMonth } from '../utils/monthStatus';
+import { getActs, MO, MOS, DY, ACT_IDS, ACT_DESC } from '../locales/translations';
+import { isWE, fdow, dk, dim } from '../utils/dateUtils';
+import { deriveMonthStatus, getMissingDays, getMonthKey, isMonthLockableByDate, parseLocalDate, selectedRangeOverlapsLockedMonth } from '../utils/monthStatus';
 import { ctryName, dName } from '../utils/formatUtils';
 import { calcYearSummary, calcMonthStats } from '../utils/statsUtils';
+import { buildCsvRows } from '../utils/exportUtils';
 import { normalizeReminderSettings, renderReminderMessage } from '../utils/reminderUtils';
 
 import { NavBar, Card, Overlay, MH } from '../components/ui/Layout';
@@ -158,11 +159,7 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
       setCsvErr(lang === "de" ? "Bitte wählen Sie einen gültigen Zeitraum." : "Please select a valid date range.");
       return;
     }
-    const rows = [[lang === "de" ? "Datum" : "Date", "Submitted", "Tag/Day", lang === "de" ? "Land" : "Country", lang === "de" ? "Aktivität" : "Activity", "Notes"]];
-    Object.keys(entries).filter(k => k >= start && k <= end).sort().forEach(k => {
-      const eRow = entries[k], dt = parseLocalDate(k);
-      rows.push([k, getSubmittedStatusForDate(k, locked), WDN[lang][getDOW(dt.getFullYear(), dt.getMonth(), dt.getDate())], eRow.period === "split" ? `${eRow.amL}/${eRow.pmL}` : eRow.loc, eRow.period === "split" ? `${actMap[eRow.amA]?.label}/${actMap[eRow.pmA]?.label}` : actMap[eRow.act]?.label, eRow.notes || ""]);
-    });
+    const rows = buildCsvRows(entries, start, end, lang, locked);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob(["\uFEFF" + rows.map(r => r.join(";")).join("\n")], { type: "text/csv;charset=utf-8;" }));
     a.download = `${t.app}_${start}_${end}.csv`;
