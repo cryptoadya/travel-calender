@@ -49,7 +49,12 @@ export const deriveMonthStatus = ({ entries = {}, lockedMonths = [], year, month
   const { fill, total, missing } = countFilledDays(entries, year, month);
   const complete = missing === 0;
   const lockableByDate = isMonthLockableByDate(year, month, today);
-  const status = locked ? MONTH_STATUS.COMPLETE_LOCKED : complete ? MONTH_STATUS.COMPLETE_UNLOCKED : MONTH_STATUS.INCOMPLETE_UNLOCKED;
+  const completeAndLocked = complete && locked;
+  const status = completeAndLocked
+    ? MONTH_STATUS.COMPLETE_LOCKED
+    : complete
+      ? MONTH_STATUS.COMPLETE_UNLOCKED
+      : MONTH_STATUS.INCOMPLETE_UNLOCKED;
 
   return {
     mk,
@@ -64,7 +69,7 @@ export const deriveMonthStatus = ({ entries = {}, lockedMonths = [], year, month
     lockableByDate,
     canLock: complete && !locked && lockableByDate,
     status,
-    color: locked ? "green" : complete ? "orange" : "red",
+    color: completeAndLocked ? "green" : complete ? "orange" : "red",
   };
 };
 

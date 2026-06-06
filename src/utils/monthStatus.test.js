@@ -29,6 +29,7 @@ assert.equal(isMonthLockableByDate(2026, 6, new Date(2026, 5, 6)), false);
 assert.equal(deriveMonthStatus({ entries: {}, lockedMonths: [], year: 2026, month: 5, today: new Date(2026, 5, 6) }).color, "red");
 assert.equal(deriveMonthStatus({ entries: juneEntries, lockedMonths: [], year: 2026, month: 5, today: new Date(2026, 5, 6) }).color, "orange");
 assert.equal(deriveMonthStatus({ entries: juneEntries, lockedMonths: ["2026-06"], year: 2026, month: 5, today: new Date(2026, 5, 6) }).color, "green");
+assert.equal(deriveMonthStatus({ entries: {}, lockedMonths: ["2026-06"], year: 2026, month: 5, today: new Date(2026, 5, 6) }).color, "red");
 assert.equal(deriveMonthStatus({ entries: juneEntries, lockedMonths: [], year: 2026, month: 6, today: new Date(2026, 5, 6) }).canLock, false);
 
 assert.equal(selectedRangeOverlapsLockedMonth({
