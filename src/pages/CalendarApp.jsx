@@ -3,6 +3,7 @@ import { C } from '../constants/colors';
 import { AVAIL_YEARS } from '../constants/config';
 import { getActs, MO, MOS, DY, WDN, ACT_IDS, ACT_DESC } from '../locales/translations';
 import { getDOW, isWE, fdow, dk, dim } from '../utils/dateUtils';
+import { deriveMonthStatus, getMissingDays, getMonthKey, isMonthLockableByDate, parseLocalDate, selectedRangeOverlapsLockedMonth } from '../utils/monthStatus';
 import { ctryName, dName } from '../utils/formatUtils';
 import { calcYearSummary, calcMonthStats } from '../utils/statsUtils';
 import { normalizeReminderSettings, renderReminderMessage } from '../utils/reminderUtils';
@@ -28,6 +29,7 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
   const [notif, setNotif] = useState(null);
   const [ldg, setLdg] = useState(true);
   const [lockErr, setLockErr] = useState(null);
+  const [bulkErr, setBulkErr] = useState(null);
   const [lockConfirm, setLockConfirm] = useState(false);
   const [unlockConfirm, setUnlockConfirm] = useState(false);
   const [remSettings, setRemSettings] = useState(normalizeReminderSettings());
@@ -80,11 +82,12 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
   const saveE = async ne => { setEntries(ne); try { await window.storage.set(`e-${uid}`, JSON.stringify(ne), true); } catch (x) { } };
   const saveL = async nl => { setLocked(nl); try { await window.storage.set(`l-${uid}`, JSON.stringify(nl), true); } catch (x) { } };
 
-  const mkey = `${yr}-${String(mo + 1).padStart(2, "0")}`;
-  const isLk = locked.includes(mkey);
-  const totalD = useMemo(() => dim(yr, mo), [yr, mo]);
-  const filledD = useMemo(() => { let c = 0; for (let i = 1; i <= dim(yr, mo); i++) if (entries[dk(yr, mo, i)]) c++; return c; }, [yr, mo, entries]);
-  const pct = Math.round((filledD / Math.max(totalD, 1)) * 100);
+  const mkey = getMonthKey(yr, mo);
+  const currentMonthStatus = useMemo(() => deriveMonthStatus({ entries, lockedMonths: locked, year: yr, month: mo, today }), [entries, locked, yr, mo, today]);
+  const isLk = currentMonthStatus.locked;
+  const totalD = currentMonthStatus.total;
+  const filledD = currentMonthStatus.fill;
+  const pct = currentMonthStatus.pct;
   const reminder = useMemo(() => {
     if (readOnly || !remSettings.enabled || today.getDate() < remSettings.firstReminderDay) return null;
     const cy = today.getFullYear(), cm = today.getMonth();
@@ -112,7 +115,14 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
   
   const saveBulk = () => {
     if (!bd.start || !bd.end) return;
-    const s = new Date(bd.start), e = new Date(bd.end), ne = { ...entries };
+    setBulkErr(null);
+    if (selectedRangeOverlapsLockedMonth({ start: bd.start, end: bd.end, include: bd.inc, lockedMonths: locked })) {
+      setBulkErr(lang === "de" ? "Ein Teil des ausgewählten Kalenders ist bereits gesperrt." : "Part of the selected calendar period is already locked.");
+      return;
+    }
+    const s = parseLocalDate(bd.start), e = parseLocalDate(bd.end);
+    if (!s || !e || s > e) return;
+    const ne = { ...entries };
     let cnt = 0;
     for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
       const dIdx = d.getDate(), m = d.getMonth(), y = d.getFullYear();
@@ -125,8 +135,16 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
     saveE(ne); setBulk(false); notify(`${cnt} ${lang === "de" ? "Tage gespeichert" : "days saved"}`);
   };
 
-  const tryLockMo = () => { const d = dim(yr, mo), miss = []; for (let i = 1; i <= d; i++) if (!entries[dk(yr, mo, i)]) miss.push(i); if (miss.length) { setLockErr({ missing: miss }); return; } setLockConfirm(true); };
-  const doLockMo = () => { saveL([...locked, mkey]); setLockConfirm(false); notify(`${MO[lang][mo]} ${yr} ${t.locked} 🔒`); };
+  const tryLockMo = () => {
+    if (!isMonthLockableByDate(yr, mo, today)) {
+      setLockErr({ future: true });
+      return;
+    }
+    const miss = getMissingDays(entries, yr, mo);
+    if (miss.length) { setLockErr({ missing: miss }); return; }
+    setLockConfirm(true);
+  };
+  const doLockMo = () => { saveL(locked.includes(mkey) ? locked : [...locked, mkey]); setLockConfirm(false); notify(`${MO[lang][mo]} ${yr} ${t.locked} 🔒`); };
   const unlockAdmin = async () => { if (adminUnlock) await adminUnlock(mkey); saveL(locked.filter(m => m !== mkey)); setUnlockConfirm(false); notify(`${MO[lang][mo]} ${yr} ${t.muOK}`); };
   const exportCSV = () => { const rows = [[lang === "de" ? "Datum" : "Date", "Tag/Day", lang === "de" ? "Land" : "Country", lang === "de" ? "Aktivität" : "Activity", "Notes"]]; Object.keys(entries).filter(k => k.startsWith(yr.toString())).sort().forEach(k => { const e = entries[k], dt = new Date(k); rows.push([k, WDN[lang][getDOW(dt.getFullYear(), dt.getMonth(), dt.getDate())], e.period === "split" ? `${e.amL}/${e.pmL}` : e.loc, e.period === "split" ? `${actMap[e.amA]?.label}/${actMap[e.pmA]?.label}` : actMap[e.act]?.label, e.notes || ""]); }); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\uFEFF" + rows.map(r => r.join(";")).join("\n")], { type: "text/csv;charset=utf-8;" })); a.download = `${t.app}_${yr}.csv`; a.click(); };
 
@@ -255,8 +273,12 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
             <div style={{ width: 60, height: 6, backgroundColor: C.border, borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", backgroundColor: pct === 100 ? C.green : pct > 60 ? C.amber : C.red, borderRadius: 3, transition: "width 0.3s" }} /></div>
           </div>
         </div>
-        {lockErr && <div style={{ backgroundColor: C.redL, border: `1px solid #ffb3bb`, borderRadius: 8, padding: "10px 13px", marginBottom: 10 }}><div style={{ fontWeight: 700, fontSize: 12, color: C.red }}>{t.lockErr}</div><div style={{ fontSize: 11, color: C.redD, marginTop: 2 }}>{t.lockErrS} {lockErr.missing.slice(0, 25).join(", ")}{lockErr.missing.length > 25 ? "…" : ""}</div><button onClick={() => setLockErr(null)} style={{ marginTop: 4, fontSize: 10, border: `1px solid ${C.border}`, backgroundColor: C.white, borderRadius: 5, padding: "2px 8px", cursor: "pointer", color: C.gray }}>✕</button></div>}
-        {!readOnly && <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}><TB onClick={() => setShowMiss(s => !s)} active={showMiss}>⚠ {showMiss ? t.hideM : t.showM}</TB><TB onClick={() => setBulk(true)}>📋 {t.bulk}</TB><TB onClick={tryLockMo} disabled={isLk}>{isLk ? `🔒 ${t.locked}` : `🔒 ${t.lock}`}</TB><TB onClick={exportCSV}>⬇ CSV</TB>{sel.length > 0 && <><button onClick={openModal} style={{ padding: "4px 11px", borderRadius: 6, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer" }}>✏ {sel.length} {t.editD}</button><TB onClick={() => setSel([])}>✕ {t.clearS}</TB></>}</div>}
+        {lockErr && <div style={{ backgroundColor: C.redL, border: `1px solid #ffb3bb`, borderRadius: 8, padding: "10px 13px", marginBottom: 10 }}>
+          <div style={{ fontWeight: 700, fontSize: 12, color: C.red }}>{lockErr.future ? (lang === "de" ? "❌ Dieser Monat kann noch nicht gesperrt werden." : "❌ This month cannot be locked yet.") : t.lockErr}</div>
+          <div style={{ fontSize: 11, color: C.redD, marginTop: 2 }}>{lockErr.future ? (lang === "de" ? "Ein Monat kann erst ab dem ersten Kalendertag dieses Monats gesperrt werden." : "A month can only be locked from the first calendar day of that month.") : `${t.lockErrS} ${lockErr.missing.slice(0, 25).join(", ")}${lockErr.missing.length > 25 ? "…" : ""}`}</div>
+          <button onClick={() => setLockErr(null)} style={{ marginTop: 4, fontSize: 10, border: `1px solid ${C.border}`, backgroundColor: C.white, borderRadius: 5, padding: "2px 8px", cursor: "pointer", color: C.gray }}>✕</button>
+        </div>}
+        {!readOnly && <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}><TB onClick={() => setShowMiss(s => !s)} active={showMiss}>⚠ {showMiss ? t.hideM : t.showM}</TB><TB onClick={() => { setBulkErr(null); setBulk(true); }}>📋 {t.bulk}</TB><TB onClick={tryLockMo} disabled={isLk}>{isLk ? `🔒 ${t.locked}` : `🔒 ${t.lock}`}</TB><TB onClick={exportCSV}>⬇ CSV</TB>{sel.length > 0 && <><button onClick={openModal} style={{ padding: "4px 11px", borderRadius: 6, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer" }}>✏ {sel.length} {t.editD}</button><TB onClick={() => setSel([])}>✕ {t.clearS}</TB></>}</div>}
         {readOnly && isLk && adminUnlock && <div style={{ marginBottom: 8 }}><button onClick={() => setUnlockConfirm(true)} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer" }}>🔓 {t.unlock} {MO[lang][mo]} {yr}</button></div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3, marginBottom: 3 }}>{DY[lang].map((d, i) => <div key={d} style={{ textAlign: "center", fontSize: 10, fontWeight: 700, color: i >= 5 ? C.gray : "#374151", padding: "2px 0" }}>{d}</div>)}</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3 }}>{renderCal()}</div>
@@ -379,14 +401,15 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
           <button onClick={() => { setModal(false); setSel([]); }} style={SBTN}>{t.cancel}</button>
         </div>
       </Overlay>}
-      {bulk && <Overlay onClose={() => setBulk(false)}>
-        <MH title={t.bulk} onClose={() => setBulk(false)} />
+      {bulk && <Overlay onClose={() => { setBulk(false); setBulkErr(null); }}>
+        <MH title={t.bulk} onClose={() => { setBulk(false); setBulkErr(null); }} />
+        {bulkErr && <div style={{ backgroundColor: C.redL, border: `1px solid #ffb3bb`, borderRadius: 8, padding: "9px 11px", marginBottom: 11, fontSize: 12, color: C.red, fontWeight: 700 }}>{bulkErr}</div>}
         <div style={{ marginBottom: 11 }}><FLbl>{t.from}</FLbl><input type="date" value={bd.start} onChange={e => setBd(b => ({ ...b, start: e.target.value }))} style={INP} /></div>
         <div style={{ marginBottom: 11 }}><FLbl>{t.to}</FLbl><input type="date" value={bd.end} onChange={e => setBd(b => ({ ...b, end: e.target.value }))} style={INP} /></div>
         <div style={{ marginBottom: 11 }}><FLbl>{t.incl}</FLbl><select value={bd.inc} onChange={e => setBd(b => ({ ...b, inc: e.target.value }))} style={INP}><option value="all">{t.inclAll}</option><option value="weekdays">{t.inclWD}</option><option value="weekends">{t.inclWE}</option></select></div>
         <div style={{ marginBottom: 11 }}><FLbl>{t.country}</FLbl><CountrySelect value={bd.loc} onChange={v => setBd(b => ({ ...b, loc: v }))} t={t} /></div>
         <div style={{ marginBottom: 13 }}><FLbl>{t.activity}</FLbl><ActivitySelect value={bd.act} onChange={v => setBd(b => ({ ...b, act: v }))} acts={acts} lang={lang} /></div>
-        <div style={{ display: "flex", gap: 7 }}><button onClick={saveBulk} style={{ ...PBTN, backgroundColor: C.green }}>{t.apply}</button><button onClick={() => setBulk(false)} style={SBTN}>{t.cancel}</button></div>
+        <div style={{ display: "flex", gap: 7 }}><button onClick={saveBulk} style={{ ...PBTN, backgroundColor: C.green }}>{t.apply}</button><button onClick={() => { setBulk(false); setBulkErr(null); }} style={SBTN}>{t.cancel}</button></div>
       </Overlay>}
     </div>
   );

@@ -3,6 +3,7 @@ import { C } from '../constants/colors';
 import { DH_COMPANIES, AVAIL_YEARS, WORK_ACTS } from '../constants/config';
 import { MOS } from '../locales/translations';
 import { dk, dim } from '../utils/dateUtils';
+import { deriveMonthStatus, getMonthKey, getMissingDays, isMonthLockableByDate } from '../utils/monthStatus';
 import { dName, transferLabel, ctryName } from '../utils/formatUtils';
 import { calcRangeSummary } from '../utils/statsUtils';
 import { genInvite } from '../utils/authUtils';
@@ -37,12 +38,12 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const [editEmp, setEditEmp] = useState(null);
   const [detailEmp, setDetailEmp] = useState(null);
   const [confirmDlg, setConfirmDlg] = useState(null);
-  const [expandedEmps, setExpandedEmps] = useState(new Set());
   const [expandedCompEmps, setExpandedCompEmps] = useState(new Set());
   const [compFrom, setCompFrom] = useState(`${new Date().getFullYear()}-01-01`);
   const [compTo, setCompTo] = useState(new Date().toISOString().split("T")[0]);
   const [unlockAllEmp, setUnlockAllEmp] = useState(null);
   const [unlockMonthConfirm, setUnlockMonthConfirm] = useState(null);
+  const [lockMonthConfirm, setLockMonthConfirm] = useState(null);
   const [adminYr, setAdminYr] = useState(new Date().getFullYear());
   const [travelCompanyFilter, setTravelCompanyFilter] = useState("");
   const [travelEmployeeFilter, setTravelEmployeeFilter] = useState("");
@@ -74,8 +75,6 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   };
 
   useEffect(() => { loadAll(); }, [viewEmp]);
-
-  const toggleEmp = id => setExpandedEmps(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const deleteEmp = emp => setConfirmDlg({
     title: t.cfmDelTitle, message: `"${dName(emp)}" – ${t.cfmDelMsg}`, isDanger: true, okText: t.yesDel, onOk: async () => {
@@ -116,11 +115,46 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   };
 
   const requestUnlockMo = (emp, mk) => setUnlockMonthConfirm({ emp, mk });
+  const requestLockMo = (emp, month) => {
+    if (month.locked) return;
+    if (!month.lockableByDate) {
+      notify(lang === "de" ? "Dieser Monat kann noch nicht gesperrt werden." : "This month cannot be locked yet.");
+      return;
+    }
+    if (!month.complete) {
+      notify(lang === "de" ? "Unvollständige Monate können nicht gesperrt werden." : "Incomplete months cannot be locked.");
+      return;
+    }
+    setLockMonthConfirm({ emp, month });
+  };
 
   const confirmUnlockMo = async () => {
     if (!unlockMonthConfirm) return;
     await unlockMo(unlockMonthConfirm.emp.id, unlockMonthConfirm.mk);
     setUnlockMonthConfirm(null);
+  };
+
+  const confirmLockMo = async () => {
+    if (!lockMonthConfirm) return;
+    const { emp, month } = lockMonthConfirm;
+    const currentEntries = allE[emp.id] || {};
+    const currentLocked = allL[emp.id] || [];
+    if (!isMonthLockableByDate(month.year, month.month)) {
+      setLockMonthConfirm(null);
+      notify(lang === "de" ? "Dieser Monat kann noch nicht gesperrt werden." : "This month cannot be locked yet.");
+      return;
+    }
+    const missing = getMissingDays(currentEntries, month.year, month.month);
+    if (missing.length) {
+      setLockMonthConfirm(null);
+      notify(lang === "de" ? "Unvollständige Monate können nicht gesperrt werden." : "Incomplete months cannot be locked.");
+      return;
+    }
+    const nl = currentLocked.includes(month.mk) ? currentLocked : [...currentLocked, month.mk];
+    try { await window.storage.set(`l-${emp.id}`, JSON.stringify(nl), true); } catch (e) { }
+    setAllL(al => ({ ...al, [emp.id]: nl }));
+    setLockMonthConfirm(null);
+    notify(`${dName(emp)} · ${monthLabel(month.year, month.month)} ${t.locked} 🔒`);
   };
 
   const saveRem = async () => {
@@ -145,11 +179,10 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
     return { pct: Math.round((fill / d) * 100), fill, total: d, wbyCo };
   };
 
-  const monthKey = (y, m) => `${y}-${String(m + 1).padStart(2, "0")}`;
   const monthLabel = (y, m) => `${MOS[lang][m]} ${y}`;
   const getMonthDeadline = (y, m) => new Date(y, m + 1, 3);
   const getAdminMonthStatus = (y, m, data, lockedMonths) => {
-    const mk = monthKey(y, m);
+    const mk = getMonthKey(y, m);
     const isLocked = lockedMonths.includes(mk);
     const today = new Date();
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -164,16 +197,8 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
     return { ...data, mk, y, m, isLocked, needsSubmission, isOverdue, isDueSoon, daysToDeadline };
   };
 
-  const monthStatusLabel = month => {
-    if (month.isLocked) return t.submitted;
-    if (month.isOverdue) return t.overdue;
-    if (month.isDueSoon) return t.dueSoon;
-    if (!month.needsSubmission) return t.upcoming;
-    return t.notSubmitted;
-  };
-
   const getAggregateMonthStatus = (y, m, empList) => {
-    const mk = monthKey(y, m);
+    const mk = getMonthKey(y, m);
     const total = empList.length;
     let submitted = 0, fillPctTotal = 0;
     empList.forEach(emp => {
@@ -206,7 +231,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
     if (!rem.enabled || today.getDate() < rem.adminAlertDay) return [];
     const m = today.getMonth() === 0 ? 11 : today.getMonth() - 1;
     const y = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear();
-    const mk = monthKey(y, m);
+    const mk = getMonthKey(y, m);
     return empList.map(emp => {
       const data = getEmpMonthData(emp.id, y, m);
       const missing = data.total - data.fill;
@@ -261,6 +286,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
       {confirmDlg && <ConfirmModal title={confirmDlg.title} message={confirmDlg.message} onConfirm={confirmDlg.onOk} onCancel={() => setConfirmDlg(null)} confirmText={confirmDlg.okText} cancelText={t.cancel} isDanger={confirmDlg.isDanger} />}
       {unlockAllEmp && <ConfirmModal title={t.unlockAll} message={`${dName(unlockAllEmp)} – ${t.unlockAllMsg}`} onConfirm={() => doUnlockAll(unlockAllEmp)} onCancel={() => setUnlockAllEmp(null)} confirmText={t.yes} cancelText={t.cancel} isDanger={false} />}
       {unlockMonthConfirm && <ConfirmModal title={t.unlock} message={`${dName(unlockMonthConfirm.emp)} – ${unlockMonthConfirm.mk}. ${lang === "de" ? "Diesen Monat entsperren?" : "Unlock this month?"}`} onConfirm={confirmUnlockMo} onCancel={() => setUnlockMonthConfirm(null)} confirmText={t.yes} cancelText={t.cancel} isDanger={false} />}
+      {lockMonthConfirm && <ConfirmModal title={t.lock} message={`${dName(lockMonthConfirm.emp)} – ${monthLabel(lockMonthConfirm.month.year, lockMonthConfirm.month.month)}. ${t.cfmLockMsg}`} onConfirm={confirmLockMo} onCancel={() => setLockMonthConfirm(null)} confirmText={t.yes} cancelText={t.cancel} isDanger={false} />}
       {exportEmp && <AdminExportModal emp={exportEmp} entries={allE[exportEmp.id] || {}} lang={lang} t={t} onClose={() => setExportEmp(null)} />}
       {showCreate && <CreateEmpModal lang={lang} t={t} onClose={() => setShowCreate(false)} onCreated={nu => { setShowCreate(false); setInvitePreview(nu); loadAll(); }} />}
       {invitePreview && <InvitePreviewModal emp={invitePreview} lang={lang} t={t} onClose={() => setInvitePreview(null)} onRegen={() => regenInvite(invitePreview)} />}
@@ -283,6 +309,21 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
             </div>
           </div>
           <FilterBar companyValue={travelCompanyFilter} onCompanyChange={setTravelCompanyFilter} employeeValue={travelEmployeeFilter} onEmployeeChange={setTravelEmployeeFilter} />
+          <Card style={{ marginBottom: 12, padding: "9px 11px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", fontSize: 11, color: C.gray }}>
+              <span style={{ fontWeight: 800, color: C.dark }}>{lang === "de" ? "Monatsstatus" : "Month status"}</span>
+              {[
+                [C.redL, C.red, lang === "de" ? "Unvollständig + offen" : "Incomplete + unlocked"],
+                [C.amberL, C.amber, lang === "de" ? "Vollständig + offen" : "Complete + unlocked"],
+                [C.greenL, C.green, lang === "de" ? "Vollständig + gesperrt" : "Complete + locked"],
+              ].map(([bg, color, label]) => (
+                <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700 }}>
+                  <span style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: bg, border: `1px solid ${color}` }} />
+                  {label}
+                </span>
+              ))}
+            </div>
+          </Card>
           {activeEmps.length === 0 ? <Card><div style={{ textAlign: "center", color: C.gray, padding: 28, fontSize: 13 }}>{t.noE}</div></Card> :
             filteredTravelEmps.length === 0 ? <Card><div style={{ textAlign: "center", color: C.gray, padding: 28, fontSize: 13 }}>{t.noFilterResults}</div></Card> :
             (<>
@@ -334,68 +375,46 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                 </div>
                 {list.map(emp => {
                   const lk = allL[emp.id] || [];
-                  const expanded = expandedEmps.has(emp.id);
-                  const months = Array.from({ length: 12 }, (_, m) => getAdminMonthStatus(adminYr, m, getEmpMonthData(emp.id, adminYr, m), lk));
+                  const empEntries = allE[emp.id] || {};
+                  const months = Array.from({ length: 12 }, (_, m) => {
+                    const data = getEmpMonthData(emp.id, adminYr, m);
+                    const status = deriveMonthStatus({ entries: empEntries, lockedMonths: lk, year: adminYr, month: m });
+                    return { ...data, ...status, y: adminYr, m };
+                  });
                   const yrWbyCo = {}; months.forEach(({ wbyCo }) => Object.entries(wbyCo).forEach(([c, d]) => { yrWbyCo[c] = (yrWbyCo[c] || 0) + d; }));
-                  const visibleMonths = months.filter(mo => mo.needsSubmission);
-                  const submittedMonths = visibleMonths.filter(mo => mo.isLocked);
-                  const notSubmittedMonths = visibleMonths.filter(mo => !mo.isLocked);
-                  const overdueMonths = months.filter(mo => mo.isOverdue);
-                  const dueSoonMonths = months.filter(mo => mo.isDueSoon);
-                  const submittedPct = visibleMonths.length ? Math.round((submittedMonths.length / visibleMonths.length) * 100) : 0;
-                  const filledDays = visibleMonths.reduce((sum, mo) => sum + mo.fill, 0);
-                  const totalDays = visibleMonths.reduce((sum, mo) => sum + mo.total, 0);
-                  const fillPct = totalDays ? Math.round((filledDays / totalDays) * 100) : 0;
+                  const lockedMonths = months.filter(month => month.locked);
+                  const completeUnlockedMonths = months.filter(month => month.complete && !month.locked);
+                  const incompleteUnlockedMonths = months.filter(month => !month.complete && !month.locked);
                   return (<Card key={emp.id} style={{ marginBottom: 6 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-                        <button onClick={() => toggleEmp(emp.id)} style={{ fontWeight: 800, fontSize: 13, color: C.red, border: "none", backgroundColor: "transparent", cursor: "pointer", padding: 0, textAlign: "left" }}>
-                          {expanded ? "▼" : "▶"} {dName(emp)}
-                        </button>
-                        <span style={{ fontSize: 10, backgroundColor: C.greenL, color: C.green, padding: "1px 7px", borderRadius: 4, fontWeight: 700 }}>🔒 {submittedMonths.length}/{visibleMonths.length} {t.submittedMonths}</span>
-                        {overdueMonths.length > 0 && <span style={{ fontSize: 10, backgroundColor: C.redL, color: C.red, padding: "1px 7px", borderRadius: 4, fontWeight: 800 }}>⚠ {overdueMonths.length} {t.overdue}</span>}
-                        {dueSoonMonths.length > 0 && <span style={{ fontSize: 10, backgroundColor: C.redL, color: C.red, padding: "1px 7px", borderRadius: 4, fontWeight: 800 }}>⚠ {dueSoonMonths.length} {t.dueWithin7}</span>}
+                        <span style={{ fontWeight: 800, fontSize: 13, color: C.red }}>{dName(emp)}</span>
+                        <span style={{ fontSize: 10, backgroundColor: C.greenL, color: C.green, padding: "1px 7px", borderRadius: 4, fontWeight: 700 }}>● {lockedMonths.length}</span>
+                        <span style={{ fontSize: 10, backgroundColor: C.amberL, color: C.amber, padding: "1px 7px", borderRadius: 4, fontWeight: 700 }}>● {completeUnlockedMonths.length}</span>
+                        <span style={{ fontSize: 10, backgroundColor: C.redL, color: C.red, padding: "1px 7px", borderRadius: 4, fontWeight: 800 }}>● {incompleteUnlockedMonths.length}</span>
                       </div>
                       <div style={{ display: "flex", gap: 5 }}>
                         <button onClick={() => setExportEmp(emp)} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 11, fontWeight: 700, backgroundColor: C.green, color: C.white, border: "none", cursor: "pointer" }}>📥</button>
                         <button onClick={() => setViewEmp(emp)} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer" }}>📅</button>
                       </div>
                     </div>
-                    <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 8 }}>
-                      {[[t.submittedProgress, submittedPct, `${submittedMonths.length}/${visibleMonths.length} ${t.monthsShort}`, C.green], [t.fillProgress, fillPct, `${filledDays}/${totalDays || 0} ${lang === "de" ? "Tage" : "days"}`, fillPct === 100 ? C.green : fillPct > 60 ? C.amber : C.red]].map(([label, value, detail, color]) => (
-                        <div key={label}>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.gray, marginBottom: 3 }}><span style={{ fontWeight: 700 }}>{label}</span><span>{detail} · {value}%</span></div>
-                          <div style={{ height: 5, backgroundColor: C.border, borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${value}%`, height: "100%", backgroundColor: color, borderRadius: 3 }} /></div>
-                        </div>
-                      ))}
-                    </div>
-                    {expanded && <>
-                      <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 8 }}>
-                        <div style={{ backgroundColor: C.greenL, border: `1px solid #86efac`, borderRadius: 7, padding: "7px 9px" }}>
-                          <div style={{ fontSize: 10, fontWeight: 800, color: C.green, marginBottom: 3 }}>{t.submittedMonths}</div>
-                          <div style={{ fontSize: 10, color: C.dark, lineHeight: 1.5 }}>{submittedMonths.length ? submittedMonths.map(mo => monthLabel(mo.y, mo.m)).join(", ") : t.none}</div>
-                        </div>
-                        <div style={{ backgroundColor: notSubmittedMonths.some(mo => mo.isOverdue || mo.isDueSoon) ? C.redL : C.grayL, border: `1px solid ${notSubmittedMonths.some(mo => mo.isOverdue || mo.isDueSoon) ? "#ffb3bb" : C.border}`, borderRadius: 7, padding: "7px 9px" }}>
-                          <div style={{ fontSize: 10, fontWeight: 800, color: notSubmittedMonths.some(mo => mo.isOverdue || mo.isDueSoon) ? C.red : C.gray, marginBottom: 3 }}>{t.notSubmittedMonths}</div>
-                          <div style={{ fontSize: 10, color: C.dark, lineHeight: 1.5 }}>{notSubmittedMonths.length ? notSubmittedMonths.map(mo => `${monthLabel(mo.y, mo.m)} (${monthStatusLabel(mo)})`).join(", ") : t.none}</div>
-                        </div>
-                      </div>
-                      <div style={{ marginTop: 12, fontSize: 10, fontWeight: 700, color: C.gray, marginBottom: 4, textTransform: "uppercase" }}>{t.compL} {adminYr}</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(12,1fr) 1.6fr", gap: 3 }}>
+                    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(12,1fr) 1.6fr", gap: 3 }}>
                         {months.map(({ m, pct, wbyCo }) => {
-                          const month = months[m], { mk, isLocked: isLk, isOverdue, isDueSoon } = month;
+                          const month = months[m], { mk, locked: isLk } = month;
                           const topCo = Object.entries(wbyCo).sort((a, b) => b[1] - a[1]).slice(0, 2);
-                          const statusColor = isLk ? C.green : (isOverdue || isDueSoon) ? C.red : pct === 100 ? C.amber : pct > 60 ? C.amber : C.red;
-                          const statusBg = isLk ? C.greenL : (isOverdue || isDueSoon) ? C.redL : pct === 100 ? C.amberL : pct > 60 ? C.amberL : C.redL;
+                          const statusColor = month.color === "green" ? C.green : month.color === "orange" ? C.amber : C.red;
+                          const statusBg = month.color === "green" ? C.greenL : month.color === "orange" ? C.amberL : C.redL;
                           return (<div key={m} style={{ textAlign: "center" }}>
                             <div style={{ fontSize: 8, color: C.gray, marginBottom: 2 }}>{MOS[lang][m]}</div>
-                            <div style={{ backgroundColor: statusBg, border: `1px solid ${isOverdue || isDueSoon ? "#ffb3bb" : "transparent"}`, borderRadius: 4, padding: "3px 2px", position: "relative", cursor: "pointer", minHeight: 52, boxSizing: "border-box" }} onClick={() => setViewEmp({ ...emp, initialYr: adminYr, initialMo: m })}>
+                            <div style={{ backgroundColor: statusBg, border: `1px solid ${statusColor}`, borderRadius: 4, padding: "3px 2px", position: "relative", cursor: "pointer", minHeight: 52, boxSizing: "border-box" }} onClick={() => setViewEmp({ ...emp, initialYr: adminYr, initialMo: m })}>
                               <div style={{ fontSize: 8, fontWeight: 700, color: statusColor }}>{pct}%</div>
                               {topCo.map(([code, days]) => <div key={code} style={{ fontSize: 7, color: C.dark, lineHeight: 1.2 }}>{code}:{days}</div>)}
-                              <div style={{ fontSize: 6, color: statusColor, lineHeight: 1.2, fontWeight: 800, marginTop: 1 }}>{monthStatusLabel(month)}</div>
+                              <div style={{ fontSize: 6, color: statusColor, lineHeight: 1.2, fontWeight: 800, marginTop: 1 }}>{isLk ? t.locked : month.complete ? t.complete : `${month.missing} ${t.missing}`}</div>
                               {isLk && <div style={{ fontSize: 7, position: "absolute", top: -3, right: -1 }}>🔒</div>}
                             </div>
-                            {isLk && <button onClick={() => requestUnlockMo(emp, mk)} style={{ fontSize: 7, marginTop: 1, padding: "1px 2px", borderRadius: 3, border: `1px solid ${C.border}`, backgroundColor: C.redL, color: C.red, cursor: "pointer", width: "100%" }}>🔓</button>}
+                            {isLk
+                              ? <button onClick={() => requestUnlockMo(emp, mk)} style={{ fontSize: 7, marginTop: 1, padding: "1px 2px", borderRadius: 3, border: `1px solid ${C.border}`, backgroundColor: C.redL, color: C.red, cursor: "pointer", width: "100%" }}>🔓</button>
+                              : <button onClick={() => requestLockMo(emp, month)} style={{ fontSize: 7, marginTop: 1, padding: "1px 2px", borderRadius: 3, border: `1px solid ${month.canLock ? "#86efac" : C.border}`, backgroundColor: month.canLock ? C.greenL : C.grayL, color: month.canLock ? C.green : C.gray, cursor: "pointer", width: "100%", fontWeight: 800 }}>🔒</button>}
                           </div>);
                         })}
                         <div style={{ textAlign: "center" }}>
@@ -404,10 +423,9 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                             {Object.entries(yrWbyCo).sort((a, b) => b[1] - a[1]).map(([code, days]) => <div key={code} style={{ fontSize: 7, fontWeight: 700, color: C.blue, lineHeight: 1.3 }}>{code}:{days}</div>)}
                             {Object.keys(yrWbyCo).length === 0 && <div style={{ fontSize: 7, color: C.gray }}>–</div>}
                           </div>
-                          {submittedMonths.length > 0 && <button onClick={() => setUnlockAllEmp(emp)} style={{ fontSize: 7, marginTop: 1, padding: "1px 3px", borderRadius: 3, border: `1px solid ${C.border}`, backgroundColor: C.amberL, color: "#92400E", cursor: "pointer", width: "100%", fontWeight: 700 }}>🔓 all</button>}
+                          {lockedMonths.length > 0 && <button onClick={() => setUnlockAllEmp(emp)} style={{ fontSize: 7, marginTop: 1, padding: "1px 3px", borderRadius: 3, border: `1px solid ${C.border}`, backgroundColor: C.amberL, color: "#92400E", cursor: "pointer", width: "100%", fontWeight: 700 }}>🔓 all</button>}
                         </div>
                       </div>
-                    </>}
                   </Card>);
                 })}
               </div>);
