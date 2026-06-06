@@ -1,4 +1,4 @@
-import { CMAP } from '../constants/countries';
+import { CMAP } from '../constants/countries.js';
 
 export const dName = u => u && (u.firstName ? `${u.firstName} ${u.lastName}`.trim() : u.name || u.email || "");
 

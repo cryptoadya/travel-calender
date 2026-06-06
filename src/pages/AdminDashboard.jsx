@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { C } from '../constants/colors';
 import { DH_COMPANIES, AVAIL_YEARS, WORK_ACTS } from '../constants/config';
-import { MOS } from '../locales/translations';
+import { MO, MOS } from '../locales/translations';
 import { dk, dim } from '../utils/dateUtils';
 import { deriveMonthStatus, getMonthKey, getMissingDays, isMonthLockableByDate } from '../utils/monthStatus';
 import { dName, transferLabel, ctryName } from '../utils/formatUtils';
@@ -18,7 +18,7 @@ import { INP, FLbl } from '../components/ui/Inputs';
 import { Notif } from '../components/ui/Feedback';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { ConfirmModal } from '../components/modals/ConfirmModal';
-import { AdminExportModal } from '../components/modals/AdminExportModal';
+import { AdminAllEmployeesExportModal, AdminExportModal } from '../components/modals/AdminExportModal';
 import { CreateEmpModal } from '../components/modals/CreateEmpModal';
 import { InvitePreviewModal } from '../components/modals/InvitePreviewModal';
 import { EditEmpModal } from '../components/modals/EditEmpModal';
@@ -33,6 +33,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const [view, setView] = useState("travel");
   const [rem, setRem] = useState(normalizeReminderSettings());
   const [exportEmp, setExportEmp] = useState(null);
+  const [exportAll, setExportAll] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [invitePreview, setInvitePreview] = useState(null);
   const [editEmp, setEditEmp] = useState(null);
@@ -45,6 +46,8 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const [unlockMonthConfirm, setUnlockMonthConfirm] = useState(null);
   const [lockMonthConfirm, setLockMonthConfirm] = useState(null);
   const [adminYr, setAdminYr] = useState(new Date().getFullYear());
+  const [adminReportYr, setAdminReportYr] = useState(new Date().getFullYear());
+  const [adminReportMo, setAdminReportMo] = useState(new Date().getMonth());
   const [travelCompanyFilter, setTravelCompanyFilter] = useState("");
   const [travelEmployeeFilter, setTravelEmployeeFilter] = useState("");
   const [teamCompanyFilter, setTeamCompanyFilter] = useState("");
@@ -287,7 +290,8 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
       {unlockAllEmp && <ConfirmModal title={t.unlockAll} message={`${dName(unlockAllEmp)} – ${t.unlockAllMsg}`} onConfirm={() => doUnlockAll(unlockAllEmp)} onCancel={() => setUnlockAllEmp(null)} confirmText={t.yes} cancelText={t.cancel} isDanger={false} />}
       {unlockMonthConfirm && <ConfirmModal title={t.unlock} message={`${dName(unlockMonthConfirm.emp)} – ${unlockMonthConfirm.mk}. ${lang === "de" ? "Diesen Monat entsperren?" : "Unlock this month?"}`} onConfirm={confirmUnlockMo} onCancel={() => setUnlockMonthConfirm(null)} confirmText={t.yes} cancelText={t.cancel} isDanger={false} />}
       {lockMonthConfirm && <ConfirmModal title={t.lock} message={`${dName(lockMonthConfirm.emp)} – ${monthLabel(lockMonthConfirm.month.year, lockMonthConfirm.month.month)}. ${t.cfmLockMsg}`} onConfirm={confirmLockMo} onCancel={() => setLockMonthConfirm(null)} confirmText={t.yes} cancelText={t.cancel} isDanger={false} />}
-      {exportEmp && <AdminExportModal emp={exportEmp} entries={allE[exportEmp.id] || {}} lang={lang} t={t} onClose={() => setExportEmp(null)} />}
+      {exportEmp && <AdminExportModal emp={exportEmp} entries={allE[exportEmp.id] || {}} locked={allL[exportEmp.id] || []} lang={lang} t={t} onClose={() => setExportEmp(null)} />}
+      {exportAll && <AdminAllEmployeesExportModal employees={activeEmps} entriesByEmployee={allE} lockedByEmployee={allL} year={adminReportYr} setYear={setAdminReportYr} month={adminReportMo} setMonth={setAdminReportMo} lang={lang} t={t} months={MO[lang]} years={AVAIL_YEARS} onClose={() => setExportAll(false)} />}
       {showCreate && <CreateEmpModal lang={lang} t={t} onClose={() => setShowCreate(false)} onCreated={nu => { setShowCreate(false); setInvitePreview(nu); loadAll(); }} />}
       {invitePreview && <InvitePreviewModal emp={invitePreview} lang={lang} t={t} onClose={() => setInvitePreview(null)} onRegen={() => regenInvite(invitePreview)} />}
       {editEmp && <EditEmpModal emp={editEmp} lang={lang} t={t} onSaved={() => { loadAll(); setDetailEmp(null); }} onClose={() => setEditEmp(null)} />}
@@ -302,6 +306,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
             <h2 style={{ fontWeight: 800, fontSize: 16, color: C.dark, margin: 0 }}>{t.travelData} ({filteredTravelEmps.length})</h2>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button onClick={() => setExportAll(true)} style={{ ...SBTN, backgroundColor: C.white }}>📊 {lang === "de" ? "Alle exportieren" : "All employees report"}</button>
               <select value={adminYr} onChange={e => setAdminYr(Number(e.target.value))} style={{ ...INP, width: "auto", padding: "5px 10px", fontSize: 12 }}>
                 {AVAIL_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
               </select>

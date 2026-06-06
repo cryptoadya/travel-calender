@@ -17,6 +17,15 @@ export const parseLocalDate = value => {
 
 export const isMonthLocked = (lockedMonths = [], year, month) => lockedMonths.includes(getMonthKey(year, month));
 
+export const isDateSubmitted = (dateKey, lockedMonths = []) => {
+  if (!dateKey || dateKey.length < 7) return false;
+  return lockedMonths.includes(dateKey.slice(0, 7));
+};
+
+export const getSubmittedStatusForDate = (dateKey, lockedMonths = []) => (
+  isDateSubmitted(dateKey, lockedMonths) ? "submitted" : "not submitted"
+);
+
 export const countFilledDays = (entries = {}, year, month) => {
   const total = dim(year, month);
   let fill = 0;

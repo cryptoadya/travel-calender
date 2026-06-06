@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 
 import {
   deriveMonthStatus,
+  getSubmittedStatusForDate,
   getMonthKey,
+  isDateSubmitted,
   isMonthComplete,
   isMonthLocked,
   isMonthLockableByDate,
@@ -23,6 +25,10 @@ assert.equal(getMonthKey(2026, 0), "2026-01");
 assert.equal(isMonthComplete(juneEntries, 2026, 5), true);
 assert.equal(isMonthComplete({ ...juneEntries, "2026-06-12": undefined }, 2026, 5), false);
 assert.equal(isMonthLocked(["2026-06"], 2026, 5), true);
+assert.equal(isDateSubmitted("2026-06-12", ["2026-06"]), true);
+assert.equal(isDateSubmitted("2026-07-01", ["2026-06"]), false);
+assert.equal(getSubmittedStatusForDate("2026-06-12", ["2026-06"]), "submitted");
+assert.equal(getSubmittedStatusForDate("2026-07-01", ["2026-06"]), "not submitted");
 assert.equal(isMonthLockableByDate(2026, 5, new Date(2026, 5, 6)), true);
 assert.equal(isMonthLockableByDate(2026, 6, new Date(2026, 5, 6)), false);
 

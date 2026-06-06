@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { C } from '../constants/colors';
 import { AVAIL_YEARS } from '../constants/config';
-import { getActs, MO, MOS, DY, WDN, ACT_IDS, ACT_DESC } from '../locales/translations';
-import { getDOW, isWE, fdow, dk, dim } from '../utils/dateUtils';
+import { getActs, MO, MOS, DY, ACT_IDS, ACT_DESC } from '../locales/translations';
+import { isWE, fdow, dk, dim } from '../utils/dateUtils';
 import { deriveMonthStatus, getMissingDays, getMonthKey, isMonthLockableByDate, parseLocalDate, selectedRangeOverlapsLockedMonth } from '../utils/monthStatus';
 import { ctryName, dName } from '../utils/formatUtils';
 import { calcYearSummary, calcMonthStats } from '../utils/statsUtils';
+import { buildCsvRows } from '../utils/exportUtils';
 import { normalizeReminderSettings, renderReminderMessage } from '../utils/reminderUtils';
 
 import { NavBar, Card, Overlay, MH } from '../components/ui/Layout';
@@ -24,12 +25,14 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
   const [sel, setSel] = useState([]);
   const [modal, setModal] = useState(false);
   const [bulk, setBulk] = useState(false);
+  const [csvOpen, setCsvOpen] = useState(false);
   const [view, setView] = useState(readOnly ? "cal" : "dash");
   const [showMiss, setShowMiss] = useState(false);
   const [notif, setNotif] = useState(null);
   const [ldg, setLdg] = useState(true);
   const [lockErr, setLockErr] = useState(null);
   const [bulkErr, setBulkErr] = useState(null);
+  const [csvErr, setCsvErr] = useState(null);
   const [lockConfirm, setLockConfirm] = useState(false);
   const [unlockConfirm, setUnlockConfirm] = useState(false);
   const [remSettings, setRemSettings] = useState(normalizeReminderSettings());
@@ -37,6 +40,7 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
   const [legendTip, setLegendTip] = useState(null);
   const [me, setMe] = useState({ loc: "DE", act: "work", period: "full", amL: "DE", pmL: "DE", amA: "work", pmA: "work", notes: "", ov: false });
   const [bd, setBd] = useState({ start: "", end: "", inc: "weekdays", loc: "DE", act: "work" });
+  const [csvCfg, setCsvCfg] = useState({ mode: "month", year: today.getFullYear(), month: today.getMonth(), start: "", end: "" });
   const [winH, setWinH] = useState(window.innerHeight);
 
   useEffect(() => {
@@ -146,7 +150,22 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
   };
   const doLockMo = () => { saveL(locked.includes(mkey) ? locked : [...locked, mkey]); setLockConfirm(false); notify(`${MO[lang][mo]} ${yr} ${t.locked} 🔒`); };
   const unlockAdmin = async () => { if (adminUnlock) await adminUnlock(mkey); saveL(locked.filter(m => m !== mkey)); setUnlockConfirm(false); notify(`${MO[lang][mo]} ${yr} ${t.muOK}`); };
-  const exportCSV = () => { const rows = [[lang === "de" ? "Datum" : "Date", "Tag/Day", lang === "de" ? "Land" : "Country", lang === "de" ? "Aktivität" : "Activity", "Notes"]]; Object.keys(entries).filter(k => k.startsWith(yr.toString())).sort().forEach(k => { const e = entries[k], dt = new Date(k); rows.push([k, WDN[lang][getDOW(dt.getFullYear(), dt.getMonth(), dt.getDate())], e.period === "split" ? `${e.amL}/${e.pmL}` : e.loc, e.period === "split" ? `${actMap[e.amA]?.label}/${actMap[e.pmA]?.label}` : actMap[e.act]?.label, e.notes || ""]); }); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\uFEFF" + rows.map(r => r.join(";")).join("\n")], { type: "text/csv;charset=utf-8;" })); a.download = `${t.app}_${yr}.csv`; a.click(); };
+  const exportCSV = () => {
+    setCsvErr(null);
+    const start = csvCfg.mode === "month" ? dk(csvCfg.year, csvCfg.month, 1) : csvCfg.start;
+    const end = csvCfg.mode === "month" ? dk(csvCfg.year, csvCfg.month, dim(csvCfg.year, csvCfg.month)) : csvCfg.end;
+    const s = parseLocalDate(start), e = parseLocalDate(end);
+    if (!s || !e || s > e) {
+      setCsvErr(lang === "de" ? "Bitte wählen Sie einen gültigen Zeitraum." : "Please select a valid date range.");
+      return;
+    }
+    const rows = buildCsvRows(entries, start, end, lang, locked);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["\uFEFF" + rows.map(r => r.join(";")).join("\n")], { type: "text/csv;charset=utf-8;" }));
+    a.download = `${t.app}_${start}_${end}.csv`;
+    a.click();
+    setCsvOpen(false);
+  };
 
   const unfilledPastMonths = useMemo(() => {
     const now = new Date(), result = [];
@@ -278,7 +297,7 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
           <div style={{ fontSize: 11, color: C.redD, marginTop: 2 }}>{lockErr.future ? (lang === "de" ? "Ein Monat kann erst ab dem ersten Kalendertag dieses Monats gesperrt werden." : "A month can only be locked from the first calendar day of that month.") : `${t.lockErrS} ${lockErr.missing.slice(0, 25).join(", ")}${lockErr.missing.length > 25 ? "…" : ""}`}</div>
           <button onClick={() => setLockErr(null)} style={{ marginTop: 4, fontSize: 10, border: `1px solid ${C.border}`, backgroundColor: C.white, borderRadius: 5, padding: "2px 8px", cursor: "pointer", color: C.gray }}>✕</button>
         </div>}
-        {!readOnly && <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}><TB onClick={() => setShowMiss(s => !s)} active={showMiss}>⚠ {showMiss ? t.hideM : t.showM}</TB><TB onClick={() => { setBulkErr(null); setBulk(true); }}>📋 {t.bulk}</TB><TB onClick={tryLockMo} disabled={isLk}>{isLk ? `🔒 ${t.locked}` : `🔒 ${t.lock}`}</TB><TB onClick={exportCSV}>⬇ CSV</TB>{sel.length > 0 && <><button onClick={openModal} style={{ padding: "4px 11px", borderRadius: 6, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer" }}>✏ {sel.length} {t.editD}</button><TB onClick={() => setSel([])}>✕ {t.clearS}</TB></>}</div>}
+        {!readOnly && <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}><TB onClick={() => setShowMiss(s => !s)} active={showMiss}>⚠ {showMiss ? t.hideM : t.showM}</TB><TB onClick={() => { setBulkErr(null); setBulk(true); }}>📋 {t.bulk}</TB><TB onClick={tryLockMo} disabled={isLk}>{isLk ? `🔒 ${t.locked}` : `🔒 ${t.lock}`}</TB><TB onClick={() => { setCsvErr(null); setCsvCfg(c => ({ ...c, year: yr, month: mo })); setCsvOpen(true); }}>⬇ CSV</TB>{sel.length > 0 && <><button onClick={openModal} style={{ padding: "4px 11px", borderRadius: 6, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer" }}>✏ {sel.length} {t.editD}</button><TB onClick={() => setSel([])}>✕ {t.clearS}</TB></>}</div>}
         {readOnly && isLk && adminUnlock && <div style={{ marginBottom: 8 }}><button onClick={() => setUnlockConfirm(true)} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer" }}>🔓 {t.unlock} {MO[lang][mo]} {yr}</button></div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3, marginBottom: 3 }}>{DY[lang].map((d, i) => <div key={d} style={{ textAlign: "center", fontSize: 10, fontWeight: 700, color: i >= 5 ? C.gray : "#374151", padding: "2px 0" }}>{d}</div>)}</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3 }}>{renderCal()}</div>
@@ -399,6 +418,32 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
           <button onClick={saveEntry} style={{ ...PBTN, backgroundColor: C.green }}>{t.save}</button>
           {sel.some(k => entries[k]) && <button onClick={deleteEntry} style={{ padding: "11px 14px", borderRadius: 9, backgroundColor: C.redL, color: C.red, border: `1px solid #ffb3bb`, cursor: "pointer", fontWeight: 700, fontSize: 13 }}>🗑 {t.delDay}</button>}
           <button onClick={() => { setModal(false); setSel([]); }} style={SBTN}>{t.cancel}</button>
+        </div>
+      </Overlay>}
+      {csvOpen && <Overlay onClose={() => { setCsvOpen(false); setCsvErr(null); }}>
+        <MH title="CSV Export" onClose={() => { setCsvOpen(false); setCsvErr(null); }} />
+        {csvErr && <div style={{ backgroundColor: C.redL, border: `1px solid #ffb3bb`, borderRadius: 8, padding: "9px 11px", marginBottom: 11, fontSize: 12, color: C.red, fontWeight: 700 }}>{csvErr}</div>}
+        <div style={{ marginBottom: 12 }}>
+          <FLbl>{lang === "de" ? "Export-Modus" : "Export mode"}</FLbl>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[
+              ["month", lang === "de" ? "Monat" : "Month"],
+              ["range", lang === "de" ? "Zeitraum" : "Date range"],
+            ].map(([mode, label]) => (
+              <button key={mode} type="button" onClick={() => setCsvCfg(c => ({ ...c, mode }))} style={{ flex: 1, padding: "7px 0", borderRadius: 7, fontSize: 11, fontWeight: 700, border: `2px solid ${csvCfg.mode === mode ? C.red : C.border}`, backgroundColor: csvCfg.mode === mode ? C.redL : C.white, color: csvCfg.mode === mode ? C.red : C.gray, cursor: "pointer" }}>{label}</button>
+            ))}
+          </div>
+        </div>
+        {csvCfg.mode === "month" ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+          <div><FLbl>{lang === "de" ? "Monat" : "Month"}</FLbl><select value={csvCfg.month} onChange={e => setCsvCfg(c => ({ ...c, month: Number(e.target.value) }))} style={INP}>{MO[lang].map((label, idx) => <option key={label} value={idx}>{label}</option>)}</select></div>
+          <div><FLbl>{t.yr}</FLbl><select value={csvCfg.year} onChange={e => setCsvCfg(c => ({ ...c, year: Number(e.target.value) }))} style={INP}>{AVAIL_YEARS.map(y => <option key={y} value={y}>{y}</option>)}</select></div>
+        </div> : <>
+          <div style={{ marginBottom: 11 }}><FLbl>{t.from}</FLbl><input type="date" value={csvCfg.start} onChange={e => setCsvCfg(c => ({ ...c, start: e.target.value }))} style={INP} /></div>
+          <div style={{ marginBottom: 14 }}><FLbl>{t.to}</FLbl><input type="date" value={csvCfg.end} onChange={e => setCsvCfg(c => ({ ...c, end: e.target.value }))} style={INP} /></div>
+        </>}
+        <div style={{ display: "flex", gap: 7 }}>
+          <button onClick={exportCSV} style={{ ...PBTN, backgroundColor: C.green }}>{lang === "de" ? "CSV erstellen" : "Generate CSV"}</button>
+          <button onClick={() => { setCsvOpen(false); setCsvErr(null); }} style={SBTN}>{t.cancel}</button>
         </div>
       </Overlay>}
       {bulk && <Overlay onClose={() => { setBulk(false); setBulkErr(null); }}>
