@@ -2,6 +2,7 @@ import { getActs, T, WDN } from '../locales/translations';
 import { WORK_ACTS } from '../constants/config';
 import { isWE, dk, fmtDate, getDOW } from './dateUtils';
 import { dName, escX } from './formatUtils';
+import { getSubmittedStatusForDate } from './monthStatus';
 
 export function calcCountrySummary(entries, fromDate, toDate) {
   const summary = {};
@@ -43,17 +44,14 @@ export function calcCountrySummary(entries, fromDate, toDate) {
 
 const fmtDays = v => String(v);
 
-export function buildExcel(emp, entries, fromDate, toDate, lang) {
-  const t = T[lang];
+const makeDailyRows = (entries, fromDate, toDate, lang, lockedMonths = []) => {
   const acts = getActs(lang);
   const actMap = Object.fromEntries(acts.map(a => [a.id, a]));
   const getL = id => actMap[id]?.label || id || "";
-  const summary = calcCountrySummary(entries, fromDate, toDate);
-  
   const rows = [];
   const s = new Date(fromDate);
   const e = new Date(toDate);
-  
+
   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
     const y = d.getFullYear();
     const m = d.getMonth();
@@ -61,31 +59,32 @@ export function buildExcel(emp, entries, fromDate, toDate, lang) {
     const k = dk(y, m, di);
     const ent = entries[k];
     const we = isWE(y, m, di);
-    
-    if (ent) {
-      rows.push({
-        date: k,
-        day: WDN[lang][getDOW(y, m, di)],
-        country: ent.period === "split" ? `${ent.amL}(VM)/${ent.pmL}(NM)` : ent.loc || "",
-        activity: ent.period === "split" ? `${getL(ent.amA)}/${getL(ent.pmA)}` : getL(ent.act),
-        notes: ent.notes || "",
-        flag: we ? "WE" : ""
-      });
-    } else {
-      rows.push({
-        date: k,
-        day: WDN[lang][getDOW(y, m, di)],
-        country: "–",
-        activity: "–",
-        notes: "",
-        flag: we ? "WE" : "MISSING"
-      });
-    }
+
+    rows.push({
+      date: k,
+      submitted: getSubmittedStatusForDate(k, lockedMonths),
+      day: WDN[lang][getDOW(y, m, di)],
+      country: ent ? (ent.period === "split" ? `${ent.amL}/${ent.pmL}` : ent.loc || "") : "–",
+      excelCountry: ent ? (ent.period === "split" ? `${ent.amL}(VM)/${ent.pmL}(NM)` : ent.loc || "") : "–",
+      activity: ent ? (ent.period === "split" ? `${getL(ent.amA)}/${getL(ent.pmA)}` : getL(ent.act)) : "–",
+      notes: ent?.notes || "",
+      flag: ent ? (we ? "WE" : "") : (we ? "WE" : "MISSING"),
+      we,
+      missing: !ent && !we
+    });
   }
+
+  return rows;
+};
+
+export function buildExcel(emp, entries, fromDate, toDate, lang, lockedMonths = []) {
+  const t = T[lang];
+  const summary = calcCountrySummary(entries, fromDate, toDate);
+  const rows = makeDailyRows(entries, fromDate, toDate, lang, lockedMonths);
   
-  const hdr = lang === "de" 
-    ? ["Datum", "Wochentag", "Land", "Aktivität", "Notizen", "Status"] 
-    : ["Date", "Weekday", "Country", "Activity", "Notes", "Status"];
+  const hdr = lang === "de"
+    ? ["Datum", "Submitted", "Wochentag", "Land", "Aktivität", "Notizen", "Status"]
+    : ["Date", "Submitted", "Weekday", "Country", "Activity", "Notes", "Status"];
   const summaryHdr = [t.country, t.stayDays, t.workingDays];
     
   const cell = v => `<Cell><Data ss:Type="String">${escX(v)}</Data></Cell>`;
@@ -104,7 +103,7 @@ ${blankRow}
 ${summaryRows}
 ${blankRow}
 <Row>${hdr.map(cell).join("")}</Row>
-${rows.map(r => `<Row>${[r.date, r.day, r.country, r.activity, r.notes, r.flag].map(cell).join("")}</Row>`).join("\n")}
+${rows.map(r => `<Row>${[r.date, r.submitted, r.day, r.excelCountry, r.activity, r.notes, r.flag].map(cell).join("")}</Row>`).join("\n")}
 </Table></Worksheet></Workbook>`;
 
   const blob = new Blob([xml], { type: "application/vnd.ms-excel" });
@@ -116,35 +115,10 @@ ${rows.map(r => `<Row>${[r.date, r.day, r.country, r.activity, r.notes, r.flag].
   URL.revokeObjectURL(url);
 }
 
-export function buildHTMLReport(emp, entries, fromDate, toDate, lang) {
+export function buildHTMLReport(emp, entries, fromDate, toDate, lang, lockedMonths = []) {
   const t = T[lang];
-  const acts = getActs(lang);
-  const actMap = Object.fromEntries(acts.map(a => [a.id, a]));
-  const getL = id => actMap[id]?.label || id || "";
   const summary = calcCountrySummary(entries, fromDate, toDate);
-  
-  const rows = [];
-  const s = new Date(fromDate);
-  const e = new Date(toDate);
-  
-  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-    const y = d.getFullYear();
-    const m = d.getMonth();
-    const di = d.getDate();
-    const k = dk(y, m, di);
-    const ent = entries[k];
-    const we = isWE(y, m, di);
-    
-    rows.push({
-      date: k,
-      day: WDN[lang][getDOW(y, m, di)],
-      country: ent ? (ent.period === "split" ? `${ent.amL}/${ent.pmL}` : ent.loc || "") : "–",
-      activity: ent ? (ent.period === "split" ? `${getL(ent.amA)}/${getL(ent.pmA)}` : getL(ent.act)) : "–",
-      notes: ent?.notes || "",
-      we,
-      missing: !ent && !we
-    });
-  }
+  const rows = makeDailyRows(entries, fromDate, toDate, lang, lockedMonths);
   
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escX(t.app)}</title>
 <style>
@@ -179,11 +153,12 @@ td{padding:5px 8px;border-bottom:1px solid #eee}
 </div>
 <table>
   <thead>
-    <tr><th>Date</th><th>Day</th><th>Country</th><th>Activity</th><th>Notes</th></tr>
+    <tr><th>Date</th><th>Submitted</th><th>Day</th><th>Country</th><th>Activity</th><th>Notes</th></tr>
   </thead>
   <tbody>
     ${rows.map(r => `<tr class="${r.we ? "we" : r.missing ? "miss" : ""}">
       <td>${r.date}</td>
+      <td>${escX(r.submitted)}</td>
       <td>${r.day}</td>
       <td>${escX(r.country)}</td>
       <td>${escX(r.activity)}</td>
@@ -199,6 +174,86 @@ td{padding:5px 8px;border-bottom:1px solid #eee}
   const a = document.createElement("a");
   a.href = url;
   a.download = `${dName(emp).replace(/\s/g, "_")}_Report.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function buildAllEmployeesExcelReport(employees, entriesByEmployee, lockedByEmployee, year, month, lang) {
+  const fromDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const toDate = dk(year, month, new Date(year, month + 1, 0).getDate());
+  const t = T[lang];
+  const hdr = lang === "de"
+    ? ["Mitarbeiter", "Datum", "Submitted", "Wochentag", "Land", "Aktivität", "Notizen", "Status"]
+    : ["Employee", "Date", "Submitted", "Weekday", "Country", "Activity", "Notes", "Status"];
+  const cell = v => `<Cell><Data ss:Type="String">${escX(v)}</Data></Cell>`;
+  const rows = employees.flatMap(emp => makeDailyRows(entriesByEmployee[emp.id] || {}, fromDate, toDate, lang, lockedByEmployee[emp.id] || [])
+    .map(r => [dName(emp), r.date, r.submitted, r.day, r.excelCountry, r.activity, r.notes, r.flag]));
+
+  const xml = `<?xml version="1.0" encoding="utf-8"?><?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Worksheet ss:Name="${lang === "de" ? "Alle Mitarbeiter" : "All Employees"}"><Table>
+<Row>${[t.app, `${fmtDate(fromDate, lang)} – ${fmtDate(toDate, lang)}`].map(cell).join("")}</Row>
+<Row>${cell("")}</Row>
+<Row>${hdr.map(cell).join("")}</Row>
+${rows.map(row => `<Row>${row.map(cell).join("")}</Row>`).join("\n")}
+</Table></Worksheet></Workbook>`;
+
+  const blob = new Blob([xml], { type: "application/vnd.ms-excel" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `All_Employees_${fromDate}_${toDate}.xls`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function buildAllEmployeesHTMLReport(employees, entriesByEmployee, lockedByEmployee, year, month, lang) {
+  const fromDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const toDate = dk(year, month, new Date(year, month + 1, 0).getDate());
+  const t = T[lang];
+  const rows = employees.flatMap(emp => makeDailyRows(entriesByEmployee[emp.id] || {}, fromDate, toDate, lang, lockedByEmployee[emp.id] || [])
+    .map(r => ({ ...r, employee: dName(emp) })));
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escX(t.app)}</title>
+<style>
+body{font-family:Arial,sans-serif;font-size:11px;padding:24px}
+.hd{background:#E2001A;color:white;padding:16px 20px;border-radius:8px;margin-bottom:16px}
+.hd h1{font-size:18px;font-weight:900;font-style:italic}
+table{width:100%;border-collapse:collapse}
+th{background:#E2001A;color:white;padding:6px 8px;text-align:left;font-size:10px}
+td{padding:5px 8px;border-bottom:1px solid #eee}
+.we{background:#f5f5f5;color:#999}
+.miss{background:#fff0f1;color:#E2001A}
+@media print{@page{margin:15mm}}
+</style></head>
+<body>
+<div class="hd">
+  <h1>Delivery Hero – ${escX(t.app)}</h1>
+  <p>${escX(lang === "de" ? "Alle Mitarbeiter" : "All Employees")} | ${escX(fmtDate(fromDate, lang))} – ${escX(fmtDate(toDate, lang))}</p>
+</div>
+<table>
+  <thead>
+    <tr><th>Employee</th><th>Date</th><th>Submitted</th><th>Day</th><th>Country</th><th>Activity</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    ${rows.map(r => `<tr class="${r.we ? "we" : r.missing ? "miss" : ""}">
+      <td>${escX(r.employee)}</td>
+      <td>${r.date}</td>
+      <td>${escX(r.submitted)}</td>
+      <td>${r.day}</td>
+      <td>${escX(r.country)}</td>
+      <td>${escX(r.activity)}</td>
+      <td>${escX(r.notes)}</td>
+    </tr>`).join("")}
+  </tbody>
+</table>
+<script>window.onload=()=>window.print();</script>
+</body></html>`;
+
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `All_Employees_${fromDate}_${toDate}_Report.html`;
   a.click();
   URL.revokeObjectURL(url);
 }
