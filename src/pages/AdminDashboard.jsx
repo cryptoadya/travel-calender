@@ -54,6 +54,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const [travelEmployeeFilter, setTravelEmployeeFilter] = useState("");
   const [teamCompanyFilter, setTeamCompanyFilter] = useState("");
   const [teamEmployeeFilter, setTeamEmployeeFilter] = useState("");
+  const [lockLogEmployeeFilter, setLockLogEmployeeFilter] = useState("");
   const [lockLog, setLockLog] = useState([]);
 
   const notify = msg => { setNotif(msg); setTimeout(() => setNotif(null), 2800); };
@@ -309,11 +310,33 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const filteredTeamGroups = groupByDH(filteredTeamEmps);
   const travelMonthOverview = Array.from({ length: 12 }, (_, m) => getAggregateMonthStatus(adminYr, m, filteredTravelEmps));
   const adminReminderWarnings = getAdminReminderWarnings(filteredTravelEmps);
-  const recentLockLog = [...lockLog].sort((a, b) => String(b.lockedAt || "").localeCompare(String(a.lockedAt || ""))).slice(0, 12);
+  const lockLogEmployeeOptions = [...emps].sort((a, b) => dName(a).localeCompare(dName(b), lang === "de" ? "de" : "en"));
+  const filteredLockLog = [...lockLog]
+    .filter(row => !lockLogEmployeeFilter || row.employeeId === lockLogEmployeeFilter)
+    .sort((a, b) => String(b.lockedAt || "").localeCompare(String(a.lockedAt || "")));
   const formatLockDate = iso => {
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? "–" : d.toLocaleString(lang === "de" ? "de-DE" : "en-US", { dateStyle: "short", timeStyle: "short" });
   };
+  const LockLogTable = ({ rows }) => rows.length === 0 ? <div style={{ fontSize: 12, color: C.gray }}>{t.noLockLog}</div> :
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+        <thead><tr style={{ borderBottom: `2px solid ${C.border}` }}>
+          <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{t.emp}</th>
+          <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{lang === "de" ? "Monat" : "Month"}</th>
+          <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{lang === "de" ? "Zeitpunkt" : "Locked at"}</th>
+          <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{lang === "de" ? "Durch" : "By"}</th>
+        </tr></thead>
+        <tbody>{rows.map(row => (
+          <tr key={row.id || `${row.employeeId}-${row.monthKey}-${row.lockedAt}`} style={{ borderBottom: `1px solid ${C.grayL}` }}>
+            <td style={{ padding: "4px 6px" }}><span style={{ fontWeight: 800, color: C.dark }}>{row.employeeName || row.employeeId}</span>{row.employeeEmail && <span style={{ color: C.gray, marginLeft: 5 }}>{row.employeeEmail}</span>}</td>
+            <td style={{ padding: "4px 6px", color: C.dark, fontWeight: 700 }}>{row.monthKey || `${row.year}-${String(row.month).padStart(2, "0")}`}</td>
+            <td style={{ padding: "4px 6px", color: C.gray }}>{formatLockDate(row.lockedAt)}</td>
+            <td style={{ padding: "4px 6px", color: C.gray }}>{row.actorRole || "–"}{(row.actorName || row.actorEmail) ? ` · ${row.actorName || row.actorEmail}` : ""}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+    </div>;
 
   return (
     <div style={{ fontFamily: "Inter,sans-serif", backgroundColor: C.grayL, minHeight: "100vh" }}>
@@ -330,7 +353,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
       {detailEmp && <EmpDetailModal emp={detailEmp} lang={lang} t={t} onEdit={() => { setEditEmp(detailEmp); setDetailEmp(null); }} onViewCal={() => { setViewEmp(detailEmp); setDetailEmp(null); }} onClose={() => setDetailEmp(null)} />}
 
       <NavBar lang={lang} setLang={setLang} t={t} sub={`${dName(user)} · Admin`} logout={logout}>
-        {[["travel", t.travelData], ["team", `👥 ${t.team}`], ["comp", t.comp], ["sets", t.sets]].map(([v, l]) => <NBtn key={v} active={view === v} onClick={() => setView(v)}>{l}</NBtn>)}
+        {[["travel", t.travelData], ["lockLog", t.lockLog], ["team", `👥 ${t.team}`], ["comp", t.comp], ["sets", t.sets]].map(([v, l]) => <NBtn key={v} active={view === v} onClick={() => setView(v)}>{l}</NBtn>)}
       </NavBar>
 
       <div style={{ padding: 14, maxWidth: 1400, margin: "0 auto" }}>
@@ -402,31 +425,6 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                 })}
               </div>
             </Card>
-            <Card style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8 }}>
-                <div style={{ fontWeight: 800, fontSize: 13, color: C.dark }}>{t.lockLog}</div>
-                <div style={{ fontSize: 10, color: C.gray }}>{lang === "de" ? "Letzte 12" : "Latest 12"}</div>
-              </div>
-              {recentLockLog.length === 0 ? <div style={{ fontSize: 12, color: C.gray }}>{t.noLockLog}</div> :
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                    <thead><tr style={{ borderBottom: `2px solid ${C.border}` }}>
-                      <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{t.emp}</th>
-                      <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{lang === "de" ? "Monat" : "Month"}</th>
-                      <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{lang === "de" ? "Zeitpunkt" : "Locked at"}</th>
-                      <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{lang === "de" ? "Durch" : "By"}</th>
-                    </tr></thead>
-                    <tbody>{recentLockLog.map(row => (
-                      <tr key={row.id || `${row.employeeId}-${row.monthKey}-${row.lockedAt}`} style={{ borderBottom: `1px solid ${C.grayL}` }}>
-                        <td style={{ padding: "4px 6px" }}><span style={{ fontWeight: 800, color: C.dark }}>{row.employeeName || row.employeeId}</span>{row.employeeEmail && <span style={{ color: C.gray, marginLeft: 5 }}>{row.employeeEmail}</span>}</td>
-                        <td style={{ padding: "4px 6px", color: C.dark, fontWeight: 700 }}>{row.monthKey || `${row.year}-${String(row.month).padStart(2, "0")}`}</td>
-                        <td style={{ padding: "4px 6px", color: C.gray }}>{formatLockDate(row.lockedAt)}</td>
-                        <td style={{ padding: "4px 6px", color: C.gray }}>{row.actorRole || "–"}{(row.actorName || row.actorEmail) ? ` · ${row.actorName || row.actorEmail}` : ""}</td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                </div>}
-            </Card>
             {companyOptions.map(co => {
               const list = filteredTravelGroups[co] || []; if (!list.length) return null;
               const label = companyLabel(co);
@@ -493,6 +491,22 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
               </div>);
             })}
             </>)}
+        </>}
+
+        {view === "lockLog" && <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+            <h2 style={{ fontWeight: 800, fontSize: 16, color: C.dark, margin: 0 }}>{t.lockLog}</h2>
+            <button onClick={loadAll} style={SBTN}>{t.ref} ⟳</button>
+          </div>
+          <Card style={{ marginBottom: 12, padding: 10 }}>
+            <select value={lockLogEmployeeFilter} onChange={e => setLockLogEmployeeFilter(e.target.value)} style={{ ...INP, width: "auto", minWidth: 240, padding: "6px 10px", fontSize: 12 }}>
+              <option value="">{t.allEmployees}</option>
+              {lockLogEmployeeOptions.map(emp => <option key={emp.id} value={emp.id}>{dName(emp)}{emp.email ? ` · ${emp.email}` : ""}</option>)}
+            </select>
+          </Card>
+          <Card>
+            <LockLogTable rows={filteredLockLog} />
+          </Card>
         </>}
 
         {view === "comp" && <>
