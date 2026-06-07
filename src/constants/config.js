@@ -15,7 +15,7 @@ export const DH_COMPANIES = [
   "PedidosYa"
 ];
 
-export const WORK_ACTS = new Set(["work", "homeoffice", "travel", "training"]);
+export const WORK_ACTS = new Set(["work", "homeoffice", "travel"]);
 
 export const TRANSFER_TYPES = ["hire_without_entity", "entity_hire", "assignment"];
 

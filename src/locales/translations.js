@@ -57,12 +57,14 @@ export const T = {
     unlockAll: "Alle Monate entsperren", unlockAllMsg: "Alle gesperrten Monate für diesen Mitarbeiter werden entsperrt. Fortfahren?",
     unlockAllOK: "Alle Monate entsperrt ✓", lockHint: "Wenn alle Tage eingetragen sind, bitte den Monat sperren um ihn zu bestätigen.",
     completeAndLock: "✅ Monat abschließen & sperren", daysPerCo: "Aufenthaltstage pro Land", workDaysCo: "Arbeitstage",
-    instrTitle: "Anleitung – Reisekalender", instrFill: "Tägliche Erfassung",
+    instrTitle: "Anleitung – Reisekalender", instrComplianceTitle: "Warum muss ich den Reisekalender ausfüllen?",
+    instrComplianceDesc: "Der Reisekalender wird für steuerliche Zwecke (Income Tax) und sozialversicherungsrechtliche Zwecke (Social Security) benötigt. Eine vollständige und fristgerechte Erfassung hilft dem Unternehmen und den Arbeitnehmern, compliant zu bleiben.",
+    instrFill: "Tägliche Erfassung",
     instrFillDesc: "Tragen Sie für jeden Tag das Land und die entsprechende Aktivität ein. Nutzen Sie die Massenerfassung für mehrere Tage auf einmal.",
     instrDeadline: "Frist zum Sperren",
     instrDeadlineDesc: "Sperren Sie jeden Monat bis spätestens am 3. des Folgemonats. Beispiel: Januar → bis 3. Februar.",
     instrActs: "Aktivitäten", instrActsDesc: "Wählen Sie die korrekte Aktivität pro Tag. Klicken Sie auf das (i)-Symbol für eine Erklärung.",
-    instrTravel: "Dienstreise (Achtung)", instrTravelDesc: "Dienstreise nur für gelegentliche Reisen verwenden – NICHT für Mitarbeiter auf Entsendung (Assignment).",
+    instrTravel: "Dienstreise (Achtung)", instrTravelDesc: "Dienstreise nur für gelegentliche Reisen, Kundentermine, Schulungen, Weiterbildungen, Workshops oder Konferenzen verwenden – NICHT für Mitarbeiter auf Entsendung (Assignment).",
     instrLock: "Monat sperren", instrLockDesc: "Sobald alle Tage ausgefüllt sind, den Monat sperren. Dies bestätigt die vollständige Erfassung.",
     instrHelp: "Bei Fragen wenden Sie sich an Ihren Administrator.", confirmedMonths: "gesperrte Monate",
     submitted: "Eingereicht", notSubmitted: "Nicht eingereicht", submittedMonths: "eingereichte Monate",
@@ -71,7 +73,7 @@ export const T = {
     monthsShort: "Monate", none: "Keine", monthlySubmissionOverview: "Monatliche Einreichungsübersicht",
     avgFill: "Ø ausgefüllt",
     t90: "90 Tage – Mögliche Lohnsteuer-/SV-Pflicht", t183: "183 Tage – Mögliche Begründung steuerlicher Ansässigkeit (DBA)",
-    taxN: "Keine steuerliche Beratung.", taxI: "ℹ Steuerliche Grenzwerte"
+    taxN: "Keine steuerliche Beratung.", taxI: "ℹ Steuerliche Grenzwerte", lockLog: "Sperrprotokoll", noLockLog: "Noch keine Sperrungen protokolliert."
   },
   en: {
     app: "Travel Calendar", signIn: "Sign In", reg: "Self Register", logout: "Sign Out", haveAcc: "Already registered?", noAcc: "No account yet?",
@@ -129,12 +131,14 @@ export const T = {
     unlockAll: "Unlock all months", unlockAllMsg: "All locked months for this employee will be unlocked. Continue?",
     unlockAllOK: "All months unlocked ✓", lockHint: "When all days are filled, please lock the month to confirm completion.",
     completeAndLock: "✅ Complete & Lock Month", daysPerCo: "Days per Country", workDaysCo: "Working Days",
-    instrTitle: "Instructions – Travel Calendar", instrFill: "Daily Entry",
+    instrTitle: "Instructions – Travel Calendar", instrComplianceTitle: "Why do I need to complete the travel calendar?",
+    instrComplianceDesc: "The travel calendar is required for income tax and social security compliance purposes. Complete and timely entries help the company and employees remain compliant.",
+    instrFill: "Daily Entry",
     instrFillDesc: "Enter the country and the corresponding activity for each day. Use the Bulk Entry for multiple days at once.",
     instrDeadline: "Deadline for Locking",
     instrDeadlineDesc: "Lock each month by the 3rd of the following month at the latest. Example: January → by February 3rd.",
     instrActs: "Activities", instrActsDesc: "Select the correct activity per day. Click the (i) icon for an explanation.",
-    instrTravel: "Business Travel (Attention)", instrTravelDesc: "Use Business Travel only for occasional trips – NOT for employees on assignment.",
+    instrTravel: "Business Travel (Attention)", instrTravelDesc: "Use Business Travel only for occasional trips, client visits, training sessions, further education, workshops, or conferences – NOT for employees on assignment.",
     instrLock: "Lock Month", instrLockDesc: "Once all days are filled in, lock the month. This confirms complete data entry.",
     instrHelp: "For questions, please contact your administrator.", confirmedMonths: "locked months",
     submitted: "Submitted", notSubmitted: "Not submitted", submittedMonths: "submitted months",
@@ -143,13 +147,13 @@ export const T = {
     monthsShort: "months", none: "None", monthlySubmissionOverview: "Monthly Submission Overview",
     avgFill: "Avg. filled",
     t90: "90 days – Possible payroll tax / SSC obligation", t183: "183 days – Possible tax residency abroad (DTA)",
-    taxN: "Not a substitute for tax advice.", taxI: "ℹ Tax Thresholds"
+    taxN: "Not a substitute for tax advice.", taxI: "ℹ Tax Thresholds", lockLog: "Lock log", noLockLog: "No locks logged yet."
   }
 };
 
 export const ACT_DESC = {
-  de: { work: "Reguläre Arbeit im Büro oder am Hauptarbeitsort des Unternehmens.", homeoffice: "Arbeit von zu Hause oder einem anderen privaten Ort (nicht Büro).", travel: "Gelegentliche Dienstreise, Arbeit beim Kunden oder unterwegs. ⚠️ Nur für sporadische Reisen – NICHT für Mitarbeiter auf Entsendung.", vacation: "Urlaubs- und Freizeittage – keine Arbeitsleistung.", holiday: "Gesetzlicher Feiertag am jeweiligen Arbeitsort.", sick: "Krankheitstage, mit oder ohne ärztliche Arbeitsunfähigkeitsbescheinigung.", training: "Schulungen, Weiterbildungen, Workshops oder Konferenzen.", nonwork: "Wochenende, unbezahlter Urlaub, Elternzeit oder sonstige Nicht-Arbeitstage." },
-  en: { work: "Regular work at the office or primary workplace of the company.", homeoffice: "Working from home or another private location (not the office).", travel: "Occasional business trip, working at a client site or on the road. ⚠️ Use ONLY for sporadic trips – NOT for employees on assignment.", vacation: "Holiday and leisure days – no work performed.", holiday: "Public / bank holiday at the respective work location.", sick: "Sick days, with or without a medical certificate.", training: "Training sessions, further education, workshops or conferences.", nonwork: "Weekend, unpaid leave, parental leave or other non-working days." }
+  de: { work: "Reguläre Arbeit im Büro oder am Hauptarbeitsort des Unternehmens.", homeoffice: "Arbeit von zu Hause oder einem anderen privaten Ort (nicht Büro).", travel: "Gelegentliche Dienstreise, Arbeit beim Kunden, unterwegs, bei Schulungen, Weiterbildungen, Workshops oder Konferenzen. ⚠️ Nur für sporadische Reisen – NICHT für Mitarbeiter auf Entsendung.", vacation: "Urlaubs- und Freizeittage – keine Arbeitsleistung und kein Land erforderlich.", holiday: "Gesetzlicher Feiertag am jeweiligen Arbeitsort.", sick: "Krankheitstage, mit oder ohne ärztliche Arbeitsunfähigkeitsbescheinigung.", nonwork: "Wochenende, unbezahlter Urlaub, Elternzeit oder sonstige Nicht-Arbeitstage – kein Land erforderlich." },
+  en: { work: "Regular work at the office or primary workplace of the company.", homeoffice: "Working from home or another private location (not the office).", travel: "Occasional business trip, working at a client site, on the road, in training, further education, workshops, or conferences. ⚠️ Use ONLY for sporadic trips – NOT for employees on assignment.", vacation: "Holiday and leisure days – no work performed and no country required.", holiday: "Public / bank holiday at the respective work location.", sick: "Sick days, with or without a medical certificate.", nonwork: "Weekend, unpaid leave, parental leave or other non-working days – no country required." }
 };
 
 export const getActs = l => [
@@ -159,11 +163,10 @@ export const getActs = l => [
   { id: "vacation", label: l === "de" ? "Urlaub" : "Vacation", color: C.green, bg: C.greenL },
   { id: "holiday", label: l === "de" ? "Feiertag" : "Public Holiday", color: C.purple, bg: "#F5F3FF" },
   { id: "sick", label: l === "de" ? "Krank / AU" : "Sick Leave", color: C.red, bg: C.redL },
-  { id: "training", label: "Training", color: "#F97316", bg: "#FFF7ED" },
   { id: "nonwork", label: l === "de" ? "Kein Arbeitstag" : "Non-Working Day", color: "#9CA3AF", bg: "#F9FAFB" },
 ];
 
-export const ACT_IDS = ["work", "homeoffice", "travel", "vacation", "holiday", "sick", "training", "nonwork"];
+export const ACT_IDS = ["work", "homeoffice", "travel", "vacation", "holiday", "sick", "nonwork"];
 export const MO = { de: ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"], en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] };
 export const MOS = { de: ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"], en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] };
 export const DY = { de: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"], en: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] };

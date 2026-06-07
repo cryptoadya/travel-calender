@@ -1,6 +1,7 @@
 import { getActs } from '../locales/translations';
 import { isWE, dk, dim } from './dateUtils';
 import { WORK_ACTS } from '../constants/config';
+import { isCountrylessActivity, normalizeActivityId } from './activityUtils';
 
 export const calcMonthStats = (entries, y, m, lang) => {
   const acts = getActs(lang);
@@ -18,13 +19,18 @@ export const calcMonthStats = (entries, y, m, lang) => {
     if (ent) {
       if (ent.period === "split") {
         [[ent.amL || "DE", ent.amA], [ent.pmL || "DE", ent.pmA]].forEach(([l, a]) => {
-          if (!byCo[l]) byCo[l] = {};
-          byCo[l][a] = (byCo[l][a] || 0) + 0.5;
+          const act = normalizeActivityId(a);
+          if (isCountrylessActivity(act)) return;
+          const loc = l || "DE";
+          if (!byCo[loc]) byCo[loc] = {};
+          byCo[loc][act] = (byCo[loc][act] || 0) + 0.5;
         });
       } else {
+        const act = normalizeActivityId(ent.act);
+        if (isCountrylessActivity(act)) continue;
         const l = ent.loc || "DE";
         if (!byCo[l]) byCo[l] = {};
-        byCo[l][ent.act] = (byCo[l][ent.act] || 0) + 1;
+        byCo[l][act] = (byCo[l][act] || 0) + 1;
       }
     } else if (!we) {
       miss++;
@@ -43,15 +49,19 @@ export const calcYearSummary = (entries, y) => {
       if (ent) {
         if (ent.period === "split") {
           [[ent.amL || "DE", ent.amA], [ent.pmL || "DE", ent.pmA]].forEach(([loc, act]) => {
+            const normalizedAct = normalizeActivityId(act);
+            if (isCountrylessActivity(normalizedAct)) return;
             if (!cc[loc]) cc[loc] = { total: 0, work: 0 };
             cc[loc].total += 0.5;
-            if (WORK_ACTS.has(act)) cc[loc].work += 0.5;
+            if (WORK_ACTS.has(normalizedAct)) cc[loc].work += 0.5;
           });
         } else {
+          const act = normalizeActivityId(ent.act);
+          if (isCountrylessActivity(act)) continue;
           const loc = ent.loc || "DE";
           if (!cc[loc]) cc[loc] = { total: 0, work: 0 };
           cc[loc].total += 1;
-          if (WORK_ACTS.has(ent.act)) cc[loc].work += 1;
+          if (WORK_ACTS.has(act)) cc[loc].work += 1;
         }
       }
     }
@@ -74,15 +84,19 @@ export const calcRangeSummary = (entries, fromDate, toDate) => {
     if (ent) {
       if (ent.period === "split") {
         [[ent.amL || "DE", ent.amA], [ent.pmL || "DE", ent.pmA]].forEach(([loc, act]) => {
+          const normalizedAct = normalizeActivityId(act);
+          if (isCountrylessActivity(normalizedAct)) return;
           if (!cc[loc]) cc[loc] = { total: 0, work: 0 };
           cc[loc].total += 0.5;
-          if (WORK_ACTS.has(act)) cc[loc].work += 0.5;
+          if (WORK_ACTS.has(normalizedAct)) cc[loc].work += 0.5;
         });
       } else {
+        const act = normalizeActivityId(ent.act);
+        if (isCountrylessActivity(act)) continue;
         const loc = ent.loc || "DE";
         if (!cc[loc]) cc[loc] = { total: 0, work: 0 };
         cc[loc].total += 1;
-        if (WORK_ACTS.has(ent.act)) cc[loc].work += 1;
+        if (WORK_ACTS.has(act)) cc[loc].work += 1;
       }
     }
   }

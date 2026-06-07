@@ -41,7 +41,7 @@ export function ActivitySelect({ value, onChange, acts, lang }) {
   );
 }
 
-export function CountrySelect({ value, onChange, t }) {
+export function CountrySelect({ value, onChange, t, disabled = false }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -57,11 +57,11 @@ export function CountrySelect({ value, onChange, t }) {
   
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <div onClick={() => { setOpen(o => !o); setQ(""); }} style={{ ...INP, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", userSelect: "none" }}>
-        <span style={{ fontSize: 12 }}>{sel ? `${sel.code} – ${sel.name}` : t.searchCtry}</span>
-        <span style={{ color: C.gray, fontSize: 10 }}>{open ? "▲" : "▼"}</span>
+      <div onClick={() => { if (disabled) return; setOpen(o => !o); setQ(""); }} style={{ ...INP, cursor: disabled ? "not-allowed" : "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", userSelect: "none", backgroundColor: disabled ? C.grayL : C.white, color: disabled ? C.gray : C.dark }}>
+        <span style={{ fontSize: 12 }}>{disabled ? "–" : sel ? `${sel.code} – ${sel.name}` : t.searchCtry}</span>
+        <span style={{ color: C.gray, fontSize: 10 }}>{disabled ? "" : open ? "▲" : "▼"}</span>
       </div>
-      {open && (
+      {open && !disabled && (
         <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, backgroundColor: C.white, border: `1px solid ${C.border}`, borderRadius: 8, zIndex: 2000, boxShadow: "0 6px 20px rgba(0,0,0,0.12)", maxHeight: 220, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "5px 7px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder={t.searchCtry} style={{ width: "100%", padding: "5px 8px", border: `1px solid ${C.border}`, borderRadius: 5, fontSize: 12, boxSizing: "border-box", outline: "none" }} />
