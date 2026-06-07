@@ -63,6 +63,7 @@ const makeDailyRows = (entries, fromDate, toDate, lang, lockedMonths = []) => {
     const k = dk(y, m, di);
     const ent = entries[k];
     const we = isWE(y, m, di);
+    const defaultWeekend = !ent && we;
 
     rows.push({
       date: k,
@@ -70,7 +71,7 @@ const makeDailyRows = (entries, fromDate, toDate, lang, lockedMonths = []) => {
       day: WDN[lang][getDOW(y, m, di)],
       country: ent ? (ent.period === "split" ? `${getLoc(ent.amL, ent.amA)}/${getLoc(ent.pmL, ent.pmA)}` : getLoc(ent.loc, ent.act)) : "–",
       excelCountry: ent ? (ent.period === "split" ? `${getLoc(ent.amL, ent.amA)}(VM)/${getLoc(ent.pmL, ent.pmA)}(NM)` : getLoc(ent.loc, ent.act)) : "–",
-      activity: ent ? (ent.period === "split" ? `${getL(ent.amA)}/${getL(ent.pmA)}` : getL(ent.act)) : "–",
+      activity: ent ? (ent.period === "split" ? `${getL(ent.amA)}/${getL(ent.pmA)}` : getL(ent.act)) : defaultWeekend ? getL("nonwork") : "–",
       notes: ent?.notes || "",
       flag: ent ? (we ? "WE" : "") : (we ? "WE" : "MISSING"),
       we,

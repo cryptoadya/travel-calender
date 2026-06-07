@@ -30,7 +30,7 @@ export const countFilledDays = (entries = {}, year, month) => {
   const total = dim(year, month);
   let fill = 0;
   for (let day = 1; day <= total; day++) {
-    if (entries[dk(year, month, day)]) fill++;
+    if (entries[dk(year, month, day)] || isWE(year, month, day)) fill++;
   }
   return { fill, total, missing: total - fill };
 };
@@ -39,7 +39,7 @@ export const getMissingDays = (entries = {}, year, month) => {
   const total = dim(year, month);
   const missing = [];
   for (let day = 1; day <= total; day++) {
-    if (!entries[dk(year, month, day)]) missing.push(day);
+    if (!entries[dk(year, month, day)] && !isWE(year, month, day)) missing.push(day);
   }
   return missing;
 };
