@@ -8,7 +8,7 @@ import { dName, transferLabel, ctryName } from '../utils/formatUtils';
 import { calcRangeSummary } from '../utils/statsUtils';
 import { genInvite } from '../utils/authUtils';
 import { normalizeReminderSettings } from '../utils/reminderUtils';
-import { appendLockLog } from '../utils/lockLog';
+import { appendLockLog, getLockLogKey } from '../utils/lockLog';
 import { isCountrylessActivity, normalizeActivityId } from '../utils/activityUtils';
 
 import { db } from '../lib/firebase';
@@ -67,18 +67,23 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
         if (u.role !== "admin") us.push({ ...u, id: d.id });
       });
       setEmps(us);
-      const ae = {}, al = {};
+      const ae = {}, al = {}, ll = [];
       for (const u of us) {
         try { const r2 = await window.storage.get(`e-${u.id}`, true); if (r2) ae[u.id] = JSON.parse(r2.value); } catch (e) { }
         try { const r3 = await window.storage.get(`l-${u.id}`, true); if (r3) al[u.id] = JSON.parse(r3.value); } catch (e) { }
+        try {
+          const r4 = await window.storage.get(getLockLogKey(u.id), true);
+          const parsed = r4 ? JSON.parse(r4.value) : [];
+          if (Array.isArray(parsed)) ll.push(...parsed);
+        } catch (e) { }
       }
       setAllE(ae);
       setAllL(al);
+      setLockLog(ll);
     } catch (e) {
       console.error(e);
     }
     try { const r = await window.storage.get("rem-settings", true); setRem(normalizeReminderSettings(r ? JSON.parse(r.value) : null)); } catch (e) { setRem(normalizeReminderSettings()); }
-    try { const r = await window.storage.get("lock-log", true); const parsed = r ? JSON.parse(r.value) : []; setLockLog(Array.isArray(parsed) ? parsed : []); } catch (e) { setLockLog([]); }
   };
 
   useEffect(() => { loadAll(); }, [viewEmp]);
