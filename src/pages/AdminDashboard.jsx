@@ -4,8 +4,7 @@ import { DH_COMPANIES, AVAIL_YEARS, WORK_ACTS } from '../constants/config';
 import { MO, MOS } from '../locales/translations';
 import { dk, dim } from '../utils/dateUtils';
 import { deriveMonthStatus, getMonthKey, getMissingDays, isMonthLockableByDate } from '../utils/monthStatus';
-import { dName, transferLabel, ctryName } from '../utils/formatUtils';
-import { calcRangeSummary } from '../utils/statsUtils';
+import { dName, transferLabel } from '../utils/formatUtils';
 import { genInvite } from '../utils/authUtils';
 import { normalizeReminderSettings } from '../utils/reminderUtils';
 import { appendLockLog, getLockLogKey } from '../utils/lockLog';
@@ -41,9 +40,6 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const [editEmp, setEditEmp] = useState(null);
   const [detailEmp, setDetailEmp] = useState(null);
   const [confirmDlg, setConfirmDlg] = useState(null);
-  const [expandedCompEmps, setExpandedCompEmps] = useState(new Set());
-  const [compFrom, setCompFrom] = useState(`${new Date().getFullYear()}-01-01`);
-  const [compTo, setCompTo] = useState(new Date().toISOString().split("T")[0]);
   const [unlockAllEmp, setUnlockAllEmp] = useState(null);
   const [unlockMonthConfirm, setUnlockMonthConfirm] = useState(null);
   const [lockMonthConfirm, setLockMonthConfirm] = useState(null);
@@ -305,7 +301,6 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const activeEmps = emps.filter(e => e.status === "active");
   const filteredTravelEmps = filterEmployees(activeEmps, travelCompanyFilter, travelEmployeeFilter);
   const filteredTeamEmps = filterEmployees(emps, teamCompanyFilter, teamEmployeeFilter);
-  const activeGroups = groupByDH(activeEmps);
   const filteredTravelGroups = groupByDH(filteredTravelEmps);
   const filteredTeamGroups = groupByDH(filteredTeamEmps);
   const travelMonthOverview = Array.from({ length: 12 }, (_, m) => getAggregateMonthStatus(adminYr, m, filteredTravelEmps));
@@ -353,7 +348,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
       {detailEmp && <EmpDetailModal emp={detailEmp} lang={lang} t={t} onEdit={() => { setEditEmp(detailEmp); setDetailEmp(null); }} onViewCal={() => { setViewEmp(detailEmp); setDetailEmp(null); }} onClose={() => setDetailEmp(null)} />}
 
       <NavBar lang={lang} setLang={setLang} t={t} sub={`${dName(user)} · Admin`} logout={logout}>
-        {[["travel", t.travelData], ["lockLog", t.lockLog], ["team", `👥 ${t.team}`], ["comp", t.comp], ["sets", t.sets]].map(([v, l]) => <NBtn key={v} active={view === v} onClick={() => setView(v)}>{l}</NBtn>)}
+        {[["travel", t.travelData], ["lockLog", t.lockLog], ["team", `👥 ${t.team}`], ["sets", t.sets]].map(([v, l]) => <NBtn key={v} active={view === v} onClick={() => setView(v)}>{l}</NBtn>)}
       </NavBar>
 
       <div style={{ padding: 14, maxWidth: 1400, margin: "0 auto" }}>
@@ -507,74 +502,6 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
           <Card>
             <LockLogTable rows={filteredLockLog} />
           </Card>
-        </>}
-
-        {view === "comp" && <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
-            <h2 style={{ fontWeight: 800, fontSize: 16, color: C.dark, margin: 0 }}>{t.comp}</h2>
-            <div style={{ backgroundColor: C.white, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
-              <div><div style={{ fontSize: 10, fontWeight: 700, color: C.gray, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>{lang === "de" ? "Von" : "From"}</div><input type="date" value={compFrom} onChange={e => setCompFrom(e.target.value)} style={{ ...INP, width: "auto", padding: "5px 8px", fontSize: 12 }} /></div>
-              <div><div style={{ fontSize: 10, fontWeight: 700, color: C.gray, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>{lang === "de" ? "Bis" : "To"}</div><input type="date" value={compTo} onChange={e => setCompTo(e.target.value)} style={{ ...INP, width: "auto", padding: "5px 8px", fontSize: 12 }} /></div>
-              <div style={{ paddingTop: 18, fontSize: 11, color: C.gray }}>{lang === "de" ? "Zeitraum-Ansicht" : "Period view"}</div>
-            </div>
-          </div>
-          {activeEmps.length === 0 ? <Card><div style={{ textAlign: "center", color: C.gray, padding: 28, fontSize: 13 }}>{t.noE}</div></Card> :
-            DH_COMPANIES.concat(["__other"]).map(co => {
-              const list = (activeGroups[co] || []).filter(emp => Object.keys(calcRangeSummary(allE[emp.id] || {}, compFrom, compTo)).length > 0);
-              if (!list.length) return null;
-              const label = co === "__other" ? (lang === "de" ? "Sonstiges" : "Other") : co;
-              return (<div key={co} style={{ marginBottom: 18 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", borderBottom: `2px solid ${C.border}`, marginBottom: 8 }}>
-                  <span>🏢</span><span style={{ fontWeight: 800, fontSize: 13, color: C.dark }}>{label}</span>
-                  <span style={{ fontSize: 11, color: C.gray, backgroundColor: C.grayL, padding: "1px 7px", borderRadius: 10 }}>{list.length}</span>
-                </div>
-                {list.map(emp => {
-                  const expanded = expandedCompEmps.has(emp.id);
-                  const toggleComp = () => setExpandedCompEmps(prev => { const n = new Set(prev); n.has(emp.id) ? n.delete(emp.id) : n.add(emp.id); return n; });
-                  const rSum = calcRangeSummary(allE[emp.id] || {}, compFrom, compTo);
-                  const countries = Object.entries(rSum).sort((a, b) => b[1].total - a[1].total);
-                  const hasWarn = countries.some(([, { total }]) => total >= 90);
-                  return (<Card key={emp.id} style={{ marginBottom: 6 }}>
-                    <div onClick={toggleComp} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, flexWrap: "wrap" }}>
-                        <span style={{ color: C.gray, fontSize: 11 }}>{expanded ? "▼" : "▶"}</span>
-                        <span style={{ fontWeight: 800, fontSize: 13, color: C.dark }}>{dName(emp)}</span>
-                        {hasWarn && <span style={{ fontSize: 13 }}>⚠️</span>}
-                        {emp.transferType && <span style={{ fontSize: 10, backgroundColor: C.blueL, color: C.blue, padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>{transferLabel(emp.transferType, lang)}</span>}
-                        {emp.homeCountry && <span style={{ fontSize: 10, backgroundColor: C.grayL, color: C.slate, padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>🏠 {emp.homeCountry}</span>}
-                        {emp.hostCountry && <span style={{ fontSize: 10, backgroundColor: C.grayL, color: C.slate, padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>✈️ {emp.hostCountry}</span>}
-                        {!expanded && <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                          {countries.slice(0, 4).map(([code, { total }]) => (
-                            <span key={code} style={{ fontSize: 10, backgroundColor: total >= 183 ? C.redL : total >= 90 ? C.amberL : C.grayL, color: total >= 183 ? C.red : total >= 90 ? C.amber : C.gray, padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>{code}: {total}d</span>
-                          ))}
-                        </div>}
-                      </div>
-                      <button onClick={e => { e.stopPropagation(); setViewEmp(emp); }} style={{ padding: "3px 8px", borderRadius: 5, fontSize: 11, fontWeight: 700, backgroundColor: C.red, color: C.white, border: "none", cursor: "pointer", flexShrink: 0 }}>📅</button>
-                    </div>
-                    {expanded && <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {countries.map(([code, { total, work }]) => {
-                          const w183 = total >= 183, w90 = total >= 90 && !w183, pbar = Math.min(100, (total / 260) * 100);
-                          return (<div key={code}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <span style={{ fontWeight: 800, fontSize: 12, color: C.dark }}>{code}</span>
-                                <span style={{ fontSize: 10, color: C.gray }}>{ctryName(code, lang)}</span>
-                                {w183 && <span style={{ fontSize: 9, backgroundColor: C.redL, color: C.red, padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>⚠ ≥183d</span>}
-                                {w90 && <span style={{ fontSize: 9, backgroundColor: C.amberL, color: C.amber, padding: "1px 6px", borderRadius: 4, fontWeight: 700 }}>⚠ ≥90d</span>}
-                              </div>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: C.dark }}>{total}d &nbsp;<span style={{ color: C.blue }}>{lang === "de" ? "Arbeit" : "Work"}: {work}d</span></span>
-                            </div>
-                            <div style={{ height: 6, backgroundColor: C.border, borderRadius: 3 }}><div style={{ width: `${pbar}%`, height: "100%", backgroundColor: w183 ? C.red : w90 ? C.amber : C.blue, borderRadius: 3, transition: "width 0.4s" }} /></div>
-                          </div>);
-                        })}
-                      </div>
-                      <div style={{ marginTop: 10, backgroundColor: C.amberL, borderRadius: 6, padding: "6px 10px", fontSize: 10, color: "#92400E" }}>🟡 90d: {t.t90} | 🔴 183d: {t.t183}</div>
-                    </div>}
-                  </Card>);
-                })}
-              </div>);
-            })}
         </>}
 
         {view === "team" && <>
