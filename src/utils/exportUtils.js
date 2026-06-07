@@ -3,16 +3,19 @@ import { WORK_ACTS } from '../constants/config.js';
 import { isWE, dk, fmtDate, getDOW } from './dateUtils.js';
 import { dName, escX } from './formatUtils.js';
 import { getSubmittedStatusForDate } from './monthStatus.js';
+import { isCountrylessActivity, normalizeActivityId } from './activityUtils.js';
 
 export function calcCountrySummary(entries, fromDate, toDate) {
   const summary = {};
-  const addStay = (country, days) => {
+  const addStay = (country, act, days) => {
+    if (isCountrylessActivity(act)) return;
     const code = country || "DE";
     if (!summary[code]) summary[code] = { stay: 0, work: 0 };
     summary[code].stay += days;
   };
   const addWork = (country, act, days) => {
-    if (!WORK_ACTS.has(act)) return;
+    const normalizedAct = normalizeActivityId(act);
+    if (!WORK_ACTS.has(normalizedAct)) return;
     const code = country || "DE";
     if (!summary[code]) summary[code] = { stay: 0, work: 0 };
     summary[code].work += days;
@@ -26,12 +29,12 @@ export function calcCountrySummary(entries, fromDate, toDate) {
     if (!ent) continue;
     
     if (ent.period === "split") {
-      addStay(ent.amL, 0.5);
+      addStay(ent.amL, ent.amA, 0.5);
       addWork(ent.amL, ent.amA, 0.5);
-      addStay(ent.pmL, 0.5);
+      addStay(ent.pmL, ent.pmA, 0.5);
       addWork(ent.pmL, ent.pmA, 0.5);
     } else {
-      addStay(ent.loc, 1);
+      addStay(ent.loc, ent.act, 1);
       addWork(ent.loc, ent.act, 1);
     }
   }
@@ -47,7 +50,8 @@ const fmtDays = v => String(v);
 const makeDailyRows = (entries, fromDate, toDate, lang, lockedMonths = []) => {
   const acts = getActs(lang);
   const actMap = Object.fromEntries(acts.map(a => [a.id, a]));
-  const getL = id => actMap[id]?.label || id || "";
+  const getL = id => actMap[normalizeActivityId(id)]?.label || id || "";
+  const getLoc = (loc, act) => isCountrylessActivity(act) ? "–" : (loc || "");
   const rows = [];
   const s = new Date(fromDate);
   const e = new Date(toDate);
@@ -64,8 +68,8 @@ const makeDailyRows = (entries, fromDate, toDate, lang, lockedMonths = []) => {
       date: k,
       submitted: getSubmittedStatusForDate(k, lockedMonths),
       day: WDN[lang][getDOW(y, m, di)],
-      country: ent ? (ent.period === "split" ? `${ent.amL}/${ent.pmL}` : ent.loc || "") : "–",
-      excelCountry: ent ? (ent.period === "split" ? `${ent.amL}(VM)/${ent.pmL}(NM)` : ent.loc || "") : "–",
+      country: ent ? (ent.period === "split" ? `${getLoc(ent.amL, ent.amA)}/${getLoc(ent.pmL, ent.pmA)}` : getLoc(ent.loc, ent.act)) : "–",
+      excelCountry: ent ? (ent.period === "split" ? `${getLoc(ent.amL, ent.amA)}(VM)/${getLoc(ent.pmL, ent.pmA)}(NM)` : getLoc(ent.loc, ent.act)) : "–",
       activity: ent ? (ent.period === "split" ? `${getL(ent.amA)}/${getL(ent.pmA)}` : getL(ent.act)) : "–",
       notes: ent?.notes || "",
       flag: ent ? (we ? "WE" : "") : (we ? "WE" : "MISSING"),

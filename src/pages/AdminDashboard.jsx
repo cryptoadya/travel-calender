@@ -8,6 +8,8 @@ import { dName, transferLabel, ctryName } from '../utils/formatUtils';
 import { calcRangeSummary } from '../utils/statsUtils';
 import { genInvite } from '../utils/authUtils';
 import { normalizeReminderSettings } from '../utils/reminderUtils';
+import { appendLockLog } from '../utils/lockLog';
+import { isCountrylessActivity, normalizeActivityId } from '../utils/activityUtils';
 
 import { db } from '../lib/firebase';
 import { collection, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -52,6 +54,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const [travelEmployeeFilter, setTravelEmployeeFilter] = useState("");
   const [teamCompanyFilter, setTeamCompanyFilter] = useState("");
   const [teamEmployeeFilter, setTeamEmployeeFilter] = useState("");
+  const [lockLog, setLockLog] = useState([]);
 
   const notify = msg => { setNotif(msg); setTimeout(() => setNotif(null), 2800); };
 
@@ -75,6 +78,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
       console.error(e);
     }
     try { const r = await window.storage.get("rem-settings", true); setRem(normalizeReminderSettings(r ? JSON.parse(r.value) : null)); } catch (e) { setRem(normalizeReminderSettings()); }
+    try { const r = await window.storage.get("lock-log", true); const parsed = r ? JSON.parse(r.value) : []; setLockLog(Array.isArray(parsed) ? parsed : []); } catch (e) { setLockLog([]); }
   };
 
   useEffect(() => { loadAll(); }, [viewEmp]);
@@ -155,6 +159,23 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
     }
     const nl = currentLocked.includes(month.mk) ? currentLocked : [...currentLocked, month.mk];
     try { await window.storage.set(`l-${emp.id}`, JSON.stringify(nl), true); } catch (e) { }
+    if (!currentLocked.includes(month.mk)) {
+      try {
+        const logEntry = await appendLockLog({
+          employeeId: emp.id,
+          employeeName: dName(emp),
+          employeeEmail: emp.email || "",
+          monthKey: month.mk,
+          year: month.year,
+          month: month.month + 1,
+          actorRole: "admin",
+          actorId: user?.uid || user?.id || "",
+          actorName: dName(user),
+          actorEmail: user?.email || ""
+        });
+        setLockLog(log => [...log, logEntry]);
+      } catch (e) { }
+    }
     setAllL(al => ({ ...al, [emp.id]: nl }));
     setLockMonthConfirm(null);
     notify(`${dName(emp)} · ${monthLabel(month.year, month.month)} ${t.locked} 🔒`);
@@ -172,9 +193,10 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
         fill++; const ent = e[k];
         if (ent.period === "split") {
           [[ent.amL || "DE", ent.amA], [ent.pmL || "DE", ent.pmA]].forEach(([l, a]) => {
-            if (WORK_ACTS.has(a)) { wbyCo[l] = (wbyCo[l] || 0) + 0.5; }
+            const act = normalizeActivityId(a);
+            if (!isCountrylessActivity(act) && WORK_ACTS.has(act)) { wbyCo[l] = (wbyCo[l] || 0) + 0.5; }
           });
-        } else if (WORK_ACTS.has(ent.act)) {
+        } else if (!isCountrylessActivity(ent.act) && WORK_ACTS.has(normalizeActivityId(ent.act))) {
           wbyCo[ent.loc || "DE"] = (wbyCo[ent.loc || "DE"] || 0) + 1;
         }
       }
@@ -282,6 +304,11 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const filteredTeamGroups = groupByDH(filteredTeamEmps);
   const travelMonthOverview = Array.from({ length: 12 }, (_, m) => getAggregateMonthStatus(adminYr, m, filteredTravelEmps));
   const adminReminderWarnings = getAdminReminderWarnings(filteredTravelEmps);
+  const recentLockLog = [...lockLog].sort((a, b) => String(b.lockedAt || "").localeCompare(String(a.lockedAt || ""))).slice(0, 12);
+  const formatLockDate = iso => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? "–" : d.toLocaleString(lang === "de" ? "de-DE" : "en-US", { dateStyle: "short", timeStyle: "short" });
+  };
 
   return (
     <div style={{ fontFamily: "Inter,sans-serif", backgroundColor: C.grayL, minHeight: "100vh" }}>
@@ -369,6 +396,31 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
                   </div>);
                 })}
               </div>
+            </Card>
+            <Card style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontWeight: 800, fontSize: 13, color: C.dark }}>{t.lockLog}</div>
+                <div style={{ fontSize: 10, color: C.gray }}>{lang === "de" ? "Letzte 12" : "Latest 12"}</div>
+              </div>
+              {recentLockLog.length === 0 ? <div style={{ fontSize: 12, color: C.gray }}>{t.noLockLog}</div> :
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                    <thead><tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                      <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{t.emp}</th>
+                      <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{lang === "de" ? "Monat" : "Month"}</th>
+                      <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{lang === "de" ? "Zeitpunkt" : "Locked at"}</th>
+                      <th style={{ textAlign: "left", padding: "4px 6px", color: C.gray }}>{lang === "de" ? "Durch" : "By"}</th>
+                    </tr></thead>
+                    <tbody>{recentLockLog.map(row => (
+                      <tr key={row.id || `${row.employeeId}-${row.monthKey}-${row.lockedAt}`} style={{ borderBottom: `1px solid ${C.grayL}` }}>
+                        <td style={{ padding: "4px 6px" }}><span style={{ fontWeight: 800, color: C.dark }}>{row.employeeName || row.employeeId}</span>{row.employeeEmail && <span style={{ color: C.gray, marginLeft: 5 }}>{row.employeeEmail}</span>}</td>
+                        <td style={{ padding: "4px 6px", color: C.dark, fontWeight: 700 }}>{row.monthKey || `${row.year}-${String(row.month).padStart(2, "0")}`}</td>
+                        <td style={{ padding: "4px 6px", color: C.gray }}>{formatLockDate(row.lockedAt)}</td>
+                        <td style={{ padding: "4px 6px", color: C.gray }}>{row.actorRole || "–"}{(row.actorName || row.actorEmail) ? ` · ${row.actorName || row.actorEmail}` : ""}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>}
             </Card>
             {companyOptions.map(co => {
               const list = filteredTravelGroups[co] || []; if (!list.length) return null;

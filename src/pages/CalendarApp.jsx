@@ -8,6 +8,8 @@ import { ctryName, dName } from '../utils/formatUtils';
 import { calcYearSummary, calcMonthStats } from '../utils/statsUtils';
 import { buildCsvRows } from '../utils/exportUtils';
 import { normalizeReminderSettings, renderReminderMessage } from '../utils/reminderUtils';
+import { appendLockLog } from '../utils/lockLog';
+import { isCountrylessActivity, normalizeActivityId, normalizeEntryForSave } from '../utils/activityUtils';
 
 import { NavBar, Card, Overlay, MH } from '../components/ui/Layout';
 import { Ctr, Spin, Notif } from '../components/ui/Feedback';
@@ -64,6 +66,8 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
 
   const acts = getActs(lang);
   const actMap = Object.fromEntries(acts.map(a => [a.id, a]));
+  const getActMeta = id => actMap[normalizeActivityId(id)] || { color: C.gray, bg: C.white, label: normalizeActivityId(id) || "" };
+  const getCellLoc = (loc, act) => isCountrylessActivity(act) ? "–" : (loc || "");
   const notify = msg => { setNotif(msg); setTimeout(() => setNotif(null), 2500); };
 
   useEffect(() => {
@@ -113,8 +117,14 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
   const prevMo = () => { setSel([]); mo === 0 ? (setMo(11), setYr(y => y - 1)) : setMo(m => m - 1); };
   const nextMo = () => { setSel([]); mo === 11 ? (setMo(0), setYr(y => y + 1)) : setMo(m => m + 1); };
   const clickDay = d => { if (isLk || readOnly) return; const k = dk(yr, mo, d); setSel(s => s.includes(k) ? s.filter(x => x !== k) : [...s, k]); };
-  const openModal = () => { if (!sel.length) return; const ex = entries[sel[0]]; setMe(ex ? { loc: ex.loc || "DE", act: ex.act || "work", period: ex.period || "full", amL: ex.amL || "DE", pmL: ex.pmL || "DE", amA: ex.amA || "work", pmA: ex.pmA || "work", notes: ex.notes || "", ov: false } : { loc: "DE", act: "work", period: "full", amL: "DE", pmL: "DE", amA: "work", pmA: "work", notes: "", ov: false }); setModal(true); };
-  const saveEntry = () => { const ne = { ...entries }; sel.forEach(k => { if (ne[k] && !me.ov && sel.length > 1) return; ne[k] = { loc: me.loc, act: me.act, period: me.period, amL: me.amL, pmL: me.pmL, amA: me.amA, pmA: me.pmA, notes: me.notes }; }); saveE(ne); setSel([]); setModal(false); notify(`${sel.length} ${t.days} ${lang === "de" ? "gespeichert" : "saved"}`); };
+  const openModal = () => {
+    if (!sel.length) return;
+    const ex = entries[sel[0]];
+    const normalized = ex ? normalizeEntryForSave({ ...ex, notes: ex.notes || "" }) : null;
+    setMe(normalized ? { loc: normalized.loc || "", act: normalized.act || "work", period: normalized.period || "full", amL: normalized.amL || "", pmL: normalized.pmL || "", amA: normalized.amA || "work", pmA: normalized.pmA || "work", notes: normalized.notes || "", ov: false } : { loc: "DE", act: "work", period: "full", amL: "DE", pmL: "DE", amA: "work", pmA: "work", notes: "", ov: false });
+    setModal(true);
+  };
+  const saveEntry = () => { const ne = { ...entries }; const cleanEntry = normalizeEntryForSave({ loc: me.loc, act: me.act, period: me.period, amL: me.amL, pmL: me.pmL, amA: me.amA, pmA: me.pmA, notes: me.notes }); sel.forEach(k => { if (ne[k] && !me.ov && sel.length > 1) return; ne[k] = cleanEntry; }); saveE(ne); setSel([]); setModal(false); notify(`${sel.length} ${t.days} ${lang === "de" ? "gespeichert" : "saved"}`); };
   const deleteEntry = () => { const ne = { ...entries }; sel.forEach(k => { delete ne[k]; }); saveE(ne); setSel([]); setModal(false); notify(`${sel.length} ${t.days} ${lang === "de" ? "gelöscht" : "deleted"}`); };
   
   const saveBulk = () => {
@@ -133,7 +143,7 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
       if (bd.inc === "weekdays" && isWE(y, m, dIdx)) continue;
       if (bd.inc === "weekends" && !isWE(y, m, dIdx)) continue;
       const k = dk(y, m, dIdx);
-      ne[k] = { loc: bd.loc, act: bd.act, period: "full", amL: bd.loc, pmL: bd.loc, amA: bd.act, pmA: bd.act, notes: "" };
+      ne[k] = normalizeEntryForSave({ loc: bd.loc, act: bd.act, period: "full", amL: bd.loc, pmL: bd.loc, amA: bd.act, pmA: bd.act, notes: "" });
       cnt++;
     }
     saveE(ne); setBulk(false); notify(`${cnt} ${lang === "de" ? "Tage gespeichert" : "days saved"}`);
@@ -148,7 +158,28 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
     if (miss.length) { setLockErr({ missing: miss }); return; }
     setLockConfirm(true);
   };
-  const doLockMo = () => { saveL(locked.includes(mkey) ? locked : [...locked, mkey]); setLockConfirm(false); notify(`${MO[lang][mo]} ${yr} ${t.locked} 🔒`); };
+  const doLockMo = async () => {
+    const alreadyLocked = locked.includes(mkey);
+    await saveL(alreadyLocked ? locked : [...locked, mkey]);
+    if (!alreadyLocked) {
+      try {
+        await appendLockLog({
+          employeeId: uid,
+          employeeName: dName(user),
+          employeeEmail: user?.email || "",
+          monthKey: mkey,
+          year: yr,
+          month: mo + 1,
+          actorRole: "employee",
+          actorId: uid,
+          actorName: dName(user),
+          actorEmail: user?.email || ""
+        });
+      } catch (e) { }
+    }
+    setLockConfirm(false);
+    notify(`${MO[lang][mo]} ${yr} ${t.locked} 🔒`);
+  };
   const unlockAdmin = async () => { if (adminUnlock) await adminUnlock(mkey); saveL(locked.filter(m => m !== mkey)); setUnlockConfirm(false); notify(`${MO[lang][mo]} ${yr} ${t.muOK}`); };
   const exportCSV = () => {
     setCsvErr(null);
@@ -205,11 +236,11 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
     for (let day = 1; day <= d; day++) {
       const k = dk(yr, mo, day), e = entries[k], we = isWE(yr, mo, day), isTod = k === today.toISOString().split("T")[0], isSel = sel.includes(k), miss = !e && showMiss;
       let bg = we && !e ? "#F3F4F6" : C.white;
-      if (e) bg = e.period === "split" ? "#FEFCE8" : (actMap[e.act]?.bg || C.white);
+      if (e) bg = e.period === "split" ? "#FEFCE8" : (getActMeta(e.act)?.bg || C.white);
       if (miss) bg = C.redL;
       cells.push(<div key={day} onClick={() => clickDay(day)} style={{ minHeight: cellH, backgroundColor: bg, border: `2px solid ${isSel ? C.red : isTod ? C.amber : C.border}`, borderRadius: 7, padding: "5px 6px", cursor: (isLk || readOnly) ? "default" : "pointer", boxShadow: isSel ? `0 0 0 2px ${C.redL}` : "none", position: "relative", boxSizing: "border-box" }}>
         <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 10, fontWeight: 700, color: isTod ? C.amber : we ? C.gray : C.dark }}>{day}</span><span style={{ fontSize: 8 }}>{isLk ? "🔒" : ""}</span></div>
-        {e && (e.period === "split" ? <div style={{ display: "flex", gap: 2, marginTop: 2 }}><div style={{ flex: 1, borderRadius: 3, padding: "1px", backgroundColor: actMap[e.amA]?.color || C.gray, color: C.white, fontSize: 6, textAlign: "center" }}>{e.amL}</div><div style={{ flex: 1, borderRadius: 3, padding: "1px", backgroundColor: actMap[e.pmA]?.color || C.gray, color: C.white, fontSize: 6, textAlign: "center" }}>{e.pmL}</div></div> : <div style={{ marginTop: 2, borderRadius: 3, padding: "1px 3px", backgroundColor: actMap[e.act]?.color || C.gray, color: C.white, fontSize: 7, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{e.loc} · {actMap[e.act]?.label?.slice(0, 6) || ""}</div>)}
+        {e && (e.period === "split" ? <div style={{ display: "flex", gap: 2, marginTop: 2 }}><div style={{ flex: 1, borderRadius: 3, padding: "1px", backgroundColor: getActMeta(e.amA).color || C.gray, color: C.white, fontSize: 6, textAlign: "center" }}>{getCellLoc(e.amL, e.amA)}</div><div style={{ flex: 1, borderRadius: 3, padding: "1px", backgroundColor: getActMeta(e.pmA).color || C.gray, color: C.white, fontSize: 6, textAlign: "center" }}>{getCellLoc(e.pmL, e.pmA)}</div></div> : <div style={{ marginTop: 2, borderRadius: 3, padding: "1px 3px", backgroundColor: getActMeta(e.act).color || C.gray, color: C.white, fontSize: 7, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{isCountrylessActivity(e.act) ? getActMeta(e.act).label : `${e.loc || ""} · ${getActMeta(e.act).label?.slice(0, 6) || ""}`}</div>)}
         {miss && <div style={{ fontSize: 7, color: C.red, textAlign: "center", marginTop: 1 }}>⚠</div>}
       </div>);
     }
@@ -391,6 +422,7 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
         <Card>
           <h2 style={{ fontWeight: 800, fontSize: 16, color: C.dark, marginTop: 0, marginBottom: 16 }}>📖 {t.instrTitle}</h2>
           {[
+            { icon: "ℹ️", title: t.instrComplianceTitle, desc: t.instrComplianceDesc },
             { icon: "✏️", title: t.instrFill, desc: t.instrFillDesc },
             { icon: "📅", title: t.instrDeadline, desc: t.instrDeadlineDesc },
             { icon: "🏷️", title: t.instrActs, desc: t.instrActsDesc },
@@ -409,8 +441,8 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
       {modal && <Overlay onClose={() => { setModal(false); setSel([]); }}>
         <MH title={`${t.entry} – ${sel.length} ${t.days}`} onClose={() => { setModal(false); setSel([]); }} />
         <div style={{ marginBottom: 12 }}><FLbl>{t.period}</FLbl><div style={{ display: "flex", gap: 6 }}>{[["full", t.allDay], ["split", t.splitDay]].map(([p, l]) => <button key={p} type="button" onClick={() => setMe(m => ({ ...m, period: p }))} style={{ flex: 1, padding: "6px 0", borderRadius: 7, fontSize: 11, fontWeight: 700, border: `2px solid ${me.period === p ? C.red : C.border}`, backgroundColor: me.period === p ? C.redL : C.white, color: me.period === p ? C.red : C.gray, cursor: "pointer" }}>{l}</button>)}</div></div>
-        {me.period === "full" ? (<><div style={{ marginBottom: 11 }}><FLbl>{t.country}</FLbl><CountrySelect value={me.loc} onChange={v => setMe(m => ({ ...m, loc: v }))} t={t} /></div><div style={{ marginBottom: 11 }}><FLbl>{t.activity}</FLbl><ActivitySelect value={me.act} onChange={v => setMe(m => ({ ...m, act: v }))} acts={acts} lang={lang} /></div></>) : (
-          [["am", t.am, "amL", "amA"], ["pm", t.pm, "pmL", "pmA"]].map(([k, lbl, lk, ak]) => (<div key={k} style={{ marginBottom: 12, padding: 10, backgroundColor: C.grayL, borderRadius: 8 }}><FLbl>{lbl}</FLbl><div style={{ marginBottom: 7 }}><CountrySelect value={me[lk]} onChange={v => setMe(m => ({ ...m, [lk]: v }))} t={t} /></div><ActivitySelect value={me[ak]} onChange={v => setMe(m => ({ ...m, [ak]: v }))} acts={acts} lang={lang} /></div>))
+        {me.period === "full" ? (<><div style={{ marginBottom: 11 }}><FLbl>{t.country}</FLbl><CountrySelect value={me.loc} onChange={v => setMe(m => ({ ...m, loc: v }))} t={t} disabled={isCountrylessActivity(me.act)} /></div><div style={{ marginBottom: 11 }}><FLbl>{t.activity}</FLbl><ActivitySelect value={me.act} onChange={v => setMe(m => ({ ...m, act: v, loc: isCountrylessActivity(v) ? "" : (m.loc || "DE") }))} acts={acts} lang={lang} /></div></>) : (
+          [["am", t.am, "amL", "amA"], ["pm", t.pm, "pmL", "pmA"]].map(([k, lbl, lk, ak]) => (<div key={k} style={{ marginBottom: 12, padding: 10, backgroundColor: C.grayL, borderRadius: 8 }}><FLbl>{lbl}</FLbl><div style={{ marginBottom: 7 }}><CountrySelect value={me[lk]} onChange={v => setMe(m => ({ ...m, [lk]: v }))} t={t} disabled={isCountrylessActivity(me[ak])} /></div><ActivitySelect value={me[ak]} onChange={v => setMe(m => ({ ...m, [ak]: v, [lk]: isCountrylessActivity(v) ? "" : (m[lk] || "DE") }))} acts={acts} lang={lang} /></div>))
         )}
         <div style={{ marginBottom: 11 }}><FLbl>{t.notes}</FLbl><input value={me.notes} onChange={e => setMe(m => ({ ...m, notes: e.target.value }))} placeholder={t.notesH} style={INP} /></div>
         {sel.length > 1 && <label style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 11, cursor: "pointer", fontSize: 11, color: C.gray }}><input type="checkbox" checked={me.ov} onChange={e => setMe(m => ({ ...m, ov: e.target.checked }))} />{t.ovr}</label>}
@@ -452,8 +484,8 @@ export function CalendarApp({ lang, setLang, t, user, logout, uid, readOnly, emp
         <div style={{ marginBottom: 11 }}><FLbl>{t.from}</FLbl><input type="date" value={bd.start} onChange={e => setBd(b => ({ ...b, start: e.target.value }))} style={INP} /></div>
         <div style={{ marginBottom: 11 }}><FLbl>{t.to}</FLbl><input type="date" value={bd.end} onChange={e => setBd(b => ({ ...b, end: e.target.value }))} style={INP} /></div>
         <div style={{ marginBottom: 11 }}><FLbl>{t.incl}</FLbl><select value={bd.inc} onChange={e => setBd(b => ({ ...b, inc: e.target.value }))} style={INP}><option value="all">{t.inclAll}</option><option value="weekdays">{t.inclWD}</option><option value="weekends">{t.inclWE}</option></select></div>
-        <div style={{ marginBottom: 11 }}><FLbl>{t.country}</FLbl><CountrySelect value={bd.loc} onChange={v => setBd(b => ({ ...b, loc: v }))} t={t} /></div>
-        <div style={{ marginBottom: 13 }}><FLbl>{t.activity}</FLbl><ActivitySelect value={bd.act} onChange={v => setBd(b => ({ ...b, act: v }))} acts={acts} lang={lang} /></div>
+        <div style={{ marginBottom: 11 }}><FLbl>{t.country}</FLbl><CountrySelect value={bd.loc} onChange={v => setBd(b => ({ ...b, loc: v }))} t={t} disabled={isCountrylessActivity(bd.act)} /></div>
+        <div style={{ marginBottom: 13 }}><FLbl>{t.activity}</FLbl><ActivitySelect value={bd.act} onChange={v => setBd(b => ({ ...b, act: v, loc: isCountrylessActivity(v) ? "" : (b.loc || "DE") }))} acts={acts} lang={lang} /></div>
         <div style={{ display: "flex", gap: 7 }}><button onClick={saveBulk} style={{ ...PBTN, backgroundColor: C.green }}>{t.apply}</button><button onClick={() => { setBulk(false); setBulkErr(null); }} style={SBTN}>{t.cancel}</button></div>
       </Overlay>}
     </div>
