@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { buildCsvRows, calcCountrySummary } from "./exportUtils.js";
+import { buildAllEmployeesCountryWorkSummary, buildCsvRows, calcCountrySummary } from "./exportUtils.js";
 
 const rows = buildCsvRows(
   {
@@ -67,5 +67,32 @@ const summary = calcCountrySummary(
   "2026-04-02"
 );
 assert.deepEqual(summary, [{ country: "DE", stay: 1, work: 1 }]);
+
+const allEmployeesSummary = buildAllEmployeesCountryWorkSummary(
+  [
+    { id: "emp-a", firstName: "Employee", lastName: "A" },
+    { id: "emp-b", firstName: "Employee", lastName: "B" },
+  ],
+  {
+    "emp-a": {
+      "2026-03-15": { loc: "DE", act: "work" },
+      "2026-03-16": { loc: "FR", act: "training" },
+      "2026-03-17": { loc: "ES", act: "vacation" },
+      "2026-03-18": { period: "split", amL: "DE", amA: "homeoffice", pmL: "FR", pmA: "nonwork" },
+      "2026-03-19": { period: "split", amL: "AT", amA: "travel", pmL: "", pmA: "vacation" },
+    },
+    "emp-b": {
+      "2026-03-15": { loc: "AT", act: "work" },
+      "2026-03-20": { loc: "DE", act: "nonwork" },
+    },
+  },
+  "2026-03-15",
+  "2026-03-19"
+);
+
+assert.deepEqual(allEmployeesSummary, [
+  { employee: "Employee A", countries: [{ country: "DE", work: 1.5 }, { country: "FR", work: 1 }, { country: "AT", work: 0.5 }] },
+  { employee: "Employee B", countries: [{ country: "AT", work: 1 }] },
+]);
 
 console.log("exportUtils tests passed");

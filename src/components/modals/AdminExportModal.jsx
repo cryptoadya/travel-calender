@@ -4,6 +4,7 @@ import { C } from '../../constants/colors';
 import { INP, FLbl } from '../ui/Inputs';
 import { PBTN, SBTN } from '../ui/Buttons';
 import { dName } from '../../utils/formatUtils';
+import { dk } from '../../utils/dateUtils';
 import { buildAllEmployeesExcelReport, buildAllEmployeesHTMLReport, buildExcel, buildHTMLReport } from '../../utils/exportUtils';
 
 export function AdminExportModal({ emp, entries, locked = [], lang, t, onClose }) {
@@ -36,9 +37,40 @@ export function AdminExportModal({ emp, entries, locked = [], lang, t, onClose }
 }
 
 export function AdminAllEmployeesExportModal({ employees, entriesByEmployee, lockedByEmployee, year, setYear, month, setMonth, lang, t, months, years, onClose }) {
+  const today = new Date();
+  const [rangeMode, setRangeMode] = useState("month");
+  const [from, setFrom] = useState(`${today.getFullYear()}-01-01`);
+  const [to, setTo] = useState(today.toISOString().split("T")[0]);
+  const [rangeError, setRangeError] = useState("");
+  const getReportRange = () => rangeMode === "month"
+    ? {
+      fromDate: `${year}-${String(month + 1).padStart(2, "0")}-01`,
+      toDate: dk(year, month, new Date(year, month + 1, 0).getDate())
+    }
+    : { fromDate: from, toDate: to };
+  const runReport = builder => {
+    const { fromDate, toDate } = getReportRange();
+    if (!fromDate || !toDate || fromDate > toDate) {
+      setRangeError(lang === "de" ? "Das Von-Datum muss vor oder am Bis-Datum liegen." : "From date must be before or equal to To date.");
+      return;
+    }
+    setRangeError("");
+    builder(employees, entriesByEmployee, lockedByEmployee, fromDate, toDate, lang);
+    onClose();
+  };
+
   return (
     <Overlay onClose={onClose}>
       <MH title={lang === "de" ? "Bericht: alle Mitarbeiter" : "Report: all employees"} onClose={onClose} />
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button onClick={() => { setRangeMode("month"); setRangeError(""); }} style={{ ...SBTN, flex: 1, backgroundColor: rangeMode === "month" ? C.redL : C.white, color: rangeMode === "month" ? C.red : C.dark }}>
+          {lang === "de" ? "Monat" : "Month"}
+        </button>
+        <button onClick={() => { setRangeMode("custom"); setRangeError(""); }} style={{ ...SBTN, flex: 1, backgroundColor: rangeMode === "custom" ? C.redL : C.white, color: rangeMode === "custom" ? C.red : C.dark }}>
+          {lang === "de" ? "Zeitraum" : "Custom range"}
+        </button>
+      </div>
+      {rangeMode === "month" ? <>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
         <div>
           <FLbl>{lang === "de" ? "Monat" : "Month"}</FLbl>
@@ -53,11 +85,22 @@ export function AdminAllEmployeesExportModal({ employees, entriesByEmployee, loc
           </select>
         </div>
       </div>
+      </> : <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+        <div>
+          <FLbl>{t.from}</FLbl>
+          <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={INP} />
+        </div>
+        <div>
+          <FLbl>{t.to}</FLbl>
+          <input type="date" value={to} onChange={e => setTo(e.target.value)} style={INP} />
+        </div>
+      </div>}
+      {rangeError && <div style={{ color: C.red, fontSize: 12, fontWeight: 700, marginBottom: 10 }}>{rangeError}</div>}
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-        <button onClick={() => { buildAllEmployeesExcelReport(employees, entriesByEmployee, lockedByEmployee, year, month, lang); onClose(); }} style={{ ...PBTN, background: `linear-gradient(135deg,${C.green},#00875A)`, flex: 1 }}>
+        <button onClick={() => runReport(buildAllEmployeesExcelReport)} style={{ ...PBTN, background: `linear-gradient(135deg,${C.green},#00875A)`, flex: 1 }}>
           📥 {t.exportGenerate}
         </button>
-        <button onClick={() => { buildAllEmployeesHTMLReport(employees, entriesByEmployee, lockedByEmployee, year, month, lang); onClose(); }} style={{ ...PBTN, background: `linear-gradient(135deg,${C.blue},#1D4ED8)`, flex: 1 }}>
+        <button onClick={() => runReport(buildAllEmployeesHTMLReport)} style={{ ...PBTN, background: `linear-gradient(135deg,${C.blue},#1D4ED8)`, flex: 1 }}>
           🖨 {t.exportPDF}
         </button>
       </div>
