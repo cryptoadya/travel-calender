@@ -10,13 +10,26 @@ This is not a production-grade compliance system yet. Production use would requi
 - Employee calendar for daily location and activity tracking.
 - Day Split entries for separate morning and afternoon location/activity values.
 - Month completion tracking and month locking.
+- Empty Saturdays/Sundays are treated as covered Non-Working Day / Kein Arbeitstag by default, with no country stored; employees can manually override weekends when they worked, travelled, or had another activity.
+- Training is included under Business Travel / Dienstreise rather than a separate selectable activity.
+- Vacation and Non-Working Day entries do not require or store a country.
 - Employee dashboard warnings for incomplete or unlocked months.
-- Admin Travel Data overview.
+- Admin Travel Data overview with Jan-Dec month status boxes:
+  - Red: incomplete and unlocked.
+  - Orange: complete and unlocked.
+  - Green: complete and locked.
+- Future months cannot be locked before the month starts.
+- Admins can lock eligible complete employee months.
+- Bulk Entry is blocked when the selected range overlaps locked months.
+- Bulk Entry opens with the currently viewed month prefilled as the date range.
+- Admin Travel Data includes an MVP lock log for month lock events.
 - Monthly submitted/locked overview in Admin Travel Data.
 - Exact submitted and not submitted months per employee.
-- Excel and HTML/PDF reports with country summaries:
+- Employee CSV export supports a selected month or a custom date range.
+- Excel and HTML/PDF reports with submitted/not submitted status based on locked months and country summaries:
   - Aufenthaltstage / Stay Days by country.
   - Arbeitstage / Working Days by country.
+- Admin all-employees monthly report.
 - Employee comments in Management.
 - Company and employee filters in Admin Travel Data and Management.
 - Compliance overview with transfer type, home country, and host country.
@@ -79,7 +92,10 @@ The MVP uses the existing `window.storage` abstraction and stores calendar data 
 | `users/{uid}` | Employee/admin profile, including `role`, `status`, `company`, `transferType`, `homeCountry`, `hostCountry`, and `comment`. |
 | `data/e-{uid}` | JSON calendar entries keyed by date, for example `{"2026-05-01": {...}}`. |
 | `data/l-{uid}` | JSON locked month list, for example `["2026-05"]`. |
+| `data/ll-{uid}` | JSON per-employee lock log entries for month lock events. |
 | `meta/rem-settings` | UI-only reminder settings: `enabled`, `firstReminderDay`, `dailyReminderStartDay`, `adminAlertDay`, and `msg`. |
+
+Firestore rules must be deployed after rule changes, especially for employee writes to `data/ll-{uid}` lock log documents.
 
 ## Manual Testing Flow
 
@@ -90,15 +106,16 @@ The MVP uses the existing `window.storage` abstraction and stores calendar data 
 5. Create a Day Split entry.
 6. Complete and lock a month.
 7. Return as admin and check Admin > Travel Data.
-8. Export Excel and HTML/PDF reports.
-9. Check the Compliance overview.
-10. Check Reminder Settings and verify dashboard warning blocks.
+8. Verify month status colors, admin locking, and the lock log.
+9. Export CSV, Excel, HTML/PDF, and the all-employees monthly report.
+10. Check the Compliance overview.
+11. Check Reminder Settings and verify dashboard warning blocks.
 
 ## Known Production Gaps
 
 - Admin role handling should use server-side authorization and Firebase Auth custom claims in production.
 - There is no real automatic email reminder delivery.
-- There is no audit log for calendar, lock, admin, or profile changes.
+- There is an MVP lock log for month lock events, but no full production-grade append-only audit trail for calendar, admin, or profile changes.
 - Month locks are MVP app-level behavior and should be backend-enforced in production.
 - JSON blob storage is MVP-friendly but should be normalized for production reporting and audit needs.
 - Firestore access rules should be hardened before production use.
