@@ -47,6 +47,28 @@ export function calcCountrySummary(entries, fromDate, toDate) {
 
 const fmtDays = v => String(v);
 
+export function buildAllEmployeesCountryWorkSummary(employees, entriesByEmployee, fromDate, toDate) {
+  return employees.map(emp => ({
+    employee: dName(emp),
+    countries: calcCountrySummary(entriesByEmployee[emp.id] || {}, fromDate, toDate)
+      .filter(r => r.work > 0)
+      .map(r => ({ country: r.country, work: r.work }))
+  }));
+}
+
+const resolveAllEmployeesReportRange = (fromDateOrYear, toDateOrMonth, lang) => {
+  if (typeof fromDateOrYear === "number") {
+    const year = fromDateOrYear;
+    const month = toDateOrMonth;
+    return {
+      fromDate: `${year}-${String(month + 1).padStart(2, "0")}-01`,
+      toDate: dk(year, month, new Date(year, month + 1, 0).getDate()),
+      lang
+    };
+  }
+  return { fromDate: fromDateOrYear, toDate: toDateOrMonth, lang };
+};
+
 const makeDailyRows = (entries, fromDate, toDate, lang, lockedMonths = []) => {
   const acts = getActs(lang);
   const actMap = Object.fromEntries(acts.map(a => [a.id, a]));
@@ -191,14 +213,21 @@ td{padding:5px 8px;border-bottom:1px solid #eee}
   URL.revokeObjectURL(url);
 }
 
-export function buildAllEmployeesExcelReport(employees, entriesByEmployee, lockedByEmployee, year, month, lang) {
-  const fromDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
-  const toDate = dk(year, month, new Date(year, month + 1, 0).getDate());
+export function buildAllEmployeesExcelReport(employees, entriesByEmployee, lockedByEmployee, fromDate, toDate, lang) {
+  ({ fromDate, toDate, lang } = resolveAllEmployeesReportRange(fromDate, toDate, lang));
   const t = T[lang];
   const hdr = lang === "de"
     ? ["Mitarbeiter", "Datum", "Submitted", "Wochentag", "Land", "Aktivität", "Notizen", "Status"]
     : ["Employee", "Date", "Submitted", "Weekday", "Country", "Activity", "Notes", "Status"];
+  const summaryHdr = lang === "de"
+    ? ["Mitarbeiter", "Land", "Arbeitstage"]
+    : ["Employee", "Country", "Working days"];
   const cell = v => `<Cell><Data ss:Type="String">${escX(v)}</Data></Cell>`;
+  const blankRow = `<Row>${cell("")}</Row>`;
+  const summary = buildAllEmployeesCountryWorkSummary(employees, entriesByEmployee, fromDate, toDate);
+  const summaryRows = summary.flatMap(empSummary => empSummary.countries.length
+    ? empSummary.countries.map(r => [empSummary.employee, r.country, fmtDays(r.work)])
+    : [[empSummary.employee, "–", "0"]]);
   const rows = employees.flatMap(emp => makeDailyRows(entriesByEmployee[emp.id] || {}, fromDate, toDate, lang, lockedByEmployee[emp.id] || [])
     .map(r => [dName(emp), r.date, r.submitted, r.day, r.excelCountry, r.activity, r.notes, r.flag]));
 
@@ -206,7 +235,11 @@ export function buildAllEmployeesExcelReport(employees, entriesByEmployee, locke
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
 <Worksheet ss:Name="${lang === "de" ? "Alle Mitarbeiter" : "All Employees"}"><Table>
 <Row>${[t.app, `${fmtDate(fromDate, lang)} – ${fmtDate(toDate, lang)}`].map(cell).join("")}</Row>
-<Row>${cell("")}</Row>
+${blankRow}
+<Row>${cell(lang === "de" ? "Arbeitstage nach Land" : "Working days by country")}</Row>
+<Row>${summaryHdr.map(cell).join("")}</Row>
+${summaryRows.map(row => `<Row>${row.map(cell).join("")}</Row>`).join("\n")}
+${blankRow}
 <Row>${hdr.map(cell).join("")}</Row>
 ${rows.map(row => `<Row>${row.map(cell).join("")}</Row>`).join("\n")}
 </Table></Worksheet></Workbook>`;
@@ -220,10 +253,10 @@ ${rows.map(row => `<Row>${row.map(cell).join("")}</Row>`).join("\n")}
   URL.revokeObjectURL(url);
 }
 
-export function buildAllEmployeesHTMLReport(employees, entriesByEmployee, lockedByEmployee, year, month, lang) {
-  const fromDate = `${year}-${String(month + 1).padStart(2, "0")}-01`;
-  const toDate = dk(year, month, new Date(year, month + 1, 0).getDate());
+export function buildAllEmployeesHTMLReport(employees, entriesByEmployee, lockedByEmployee, fromDate, toDate, lang) {
+  ({ fromDate, toDate, lang } = resolveAllEmployeesReportRange(fromDate, toDate, lang));
   const t = T[lang];
+  const summary = buildAllEmployeesCountryWorkSummary(employees, entriesByEmployee, fromDate, toDate);
   const rows = employees.flatMap(emp => makeDailyRows(entriesByEmployee[emp.id] || {}, fromDate, toDate, lang, lockedByEmployee[emp.id] || [])
     .map(r => ({ ...r, employee: dName(emp) })));
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escX(t.app)}</title>
@@ -231,6 +264,12 @@ export function buildAllEmployeesHTMLReport(employees, entriesByEmployee, locked
 body{font-family:Arial,sans-serif;font-size:11px;padding:24px}
 .hd{background:#E2001A;color:white;padding:16px 20px;border-radius:8px;margin-bottom:16px}
 .hd h1{font-size:18px;font-weight:900;font-style:italic}
+.summary{margin-bottom:18px}
+.summary h2{font-size:14px;margin:0 0 8px;color:#1f2937}
+.emp-summary{margin:0 0 10px}
+.emp-summary h3{font-size:12px;margin:0 0 4px;color:#1f2937}
+.emp-summary ul{margin:0 0 0 16px;padding:0}
+.empty{color:#777}
 table{width:100%;border-collapse:collapse}
 th{background:#E2001A;color:white;padding:6px 8px;text-align:left;font-size:10px}
 td{padding:5px 8px;border-bottom:1px solid #eee}
@@ -242,6 +281,15 @@ td{padding:5px 8px;border-bottom:1px solid #eee}
 <div class="hd">
   <h1>Delivery Hero – ${escX(t.app)}</h1>
   <p>${escX(lang === "de" ? "Alle Mitarbeiter" : "All Employees")} | ${escX(fmtDate(fromDate, lang))} – ${escX(fmtDate(toDate, lang))}</p>
+</div>
+<div class="summary">
+  <h2>${escX(lang === "de" ? "Arbeitstage nach Land" : "Working days by country")}</h2>
+  ${summary.map(empSummary => `<div class="emp-summary">
+    <h3>${escX(empSummary.employee)}</h3>
+    ${empSummary.countries.length
+      ? `<ul>${empSummary.countries.map(r => `<li>${escX(r.country)}: ${escX(fmtDays(r.work))} ${escX(t.workingDays)}</li>`).join("")}</ul>`
+      : `<p class="empty">${escX(t.noCountryData)}</p>`}
+  </div>`).join("")}
 </div>
 <table>
   <thead>
