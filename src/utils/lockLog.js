@@ -1,10 +1,12 @@
-export const LOCK_LOG_KEY = "lock-log";
+export const getLockLogKey = employeeId => `ll-${employeeId}`;
 
 export const appendLockLog = async entry => {
+  if (!entry.employeeId) throw new Error("employeeId is required for lock log entries");
+  const key = getLockLogKey(entry.employeeId);
   const lockedAt = entry.lockedAt || new Date().toISOString();
   let current = [];
   try {
-    const existing = await window.storage.get(LOCK_LOG_KEY, true);
+    const existing = await window.storage.get(key, true);
     current = existing ? JSON.parse(existing.value) : [];
     if (!Array.isArray(current)) current = [];
   } catch (e) {
@@ -16,6 +18,6 @@ export const appendLockLog = async entry => {
     ...entry,
     lockedAt
   };
-  await window.storage.set(LOCK_LOG_KEY, JSON.stringify([...current, nextEntry]), true);
+  await window.storage.set(key, JSON.stringify([...current, nextEntry]), true);
   return nextEntry;
 };
