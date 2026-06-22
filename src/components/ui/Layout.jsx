@@ -13,7 +13,7 @@ export const NavBar = ({ lang, setLang, t, sub, logout, onBack, children }) => (
   <div style={{ backgroundColor: C.red, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, boxShadow: "0 2px 8px rgba(226,0,26,0.25)" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       {onBack && <button type="button" onClick={onBack} style={{ padding: "4px 9px", borderRadius: 6, fontSize: 11, backgroundColor: "rgba(0,0,0,0.2)", color: C.white, border: "none", cursor: "pointer" }}>{t.back}</button>}
-      <div style={{ color: C.white, fontWeight: 900, fontSize: 15, fontStyle: "italic", letterSpacing: -0.5, fontFamily: "Arial Black,Arial,sans-serif" }}>Delivery Hero</div>
+      <div style={{ color: C.white, fontWeight: 900, fontSize: 15, fontStyle: "italic", letterSpacing: -0.5, fontFamily: "Arial Black,Arial,sans-serif" }}>{t.app}</div>
       <div style={{ borderLeft: "1px solid rgba(255,255,255,0.3)", paddingLeft: 10 }}>
         <div style={{ fontSize: 10, color: "rgba(255,255,255,0.8)" }}>{sub}</div>
       </div>
@@ -49,11 +49,11 @@ export const MH = ({ title, onClose }) => (
   </div>
 );
 
-export function DHLogoLogin({ lang = "de" }) {
+export function AppLogoLogin({ lang = "de" }) {
   return (
     <div style={{ backgroundColor: C.red, borderRadius: 16, padding: "28px 48px 30px", textAlign: "center", marginBottom: 24, boxShadow: "0 8px 32px rgba(226,0,26,0.35)", width: "100%", maxWidth: 520, boxSizing: "border-box" }}>
-      <div style={{ color: C.white, fontWeight: 900, fontSize: 32, fontStyle: "italic", fontFamily: "Arial Black,Arial,sans-serif", letterSpacing: -1, lineHeight: 1 }}>Delivery Hero</div>
-      <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: 6, letterSpacing: 2, textTransform: "uppercase" }}>{lang === "de" ? "Reisekalender" : "Travel Calendar"}</div>
+      <div style={{ color: C.white, fontWeight: 900, fontSize: 32, fontStyle: "italic", fontFamily: "Arial Black,Arial,sans-serif", letterSpacing: -1, lineHeight: 1 }}>{lang === "de" ? "Reisekalender" : "Travel Calendar"}</div>
+      <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 11, marginTop: 6, letterSpacing: 2, textTransform: "uppercase" }}>{lang === "de" ? "Steuer-Compliance" : "Tax Compliance"}</div>
     </div>
   );
 }

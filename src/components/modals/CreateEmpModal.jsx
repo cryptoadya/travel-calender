@@ -6,7 +6,7 @@ import { PBTN, SBTN } from '../ui/Buttons';
 import { ErrBox } from '../ui/Feedback';
 import { transferLabel } from '../../utils/formatUtils';
 import { genInvite } from '../../utils/authUtils';
-import { DH_COMPANIES, TRANSFER_TYPES } from '../../constants/config';
+import { COMPANIES, TRANSFER_TYPES } from '../../constants/config';
 
 import { db } from '../../lib/firebase';
 import { collection, getDocs, doc, setDoc, query, where } from 'firebase/firestore';
@@ -64,7 +64,7 @@ export function CreateEmpModal({ lang, t, onCreated, onClose }) {
         <div style={{ flex: 1 }}><FLbl>{t.lastName} *</FLbl><input value={f.lastName} onChange={e => ff("lastName", e.target.value)} style={INP} /></div>
       </div>
       <div style={{ marginBottom: 11 }}><FLbl>{t.email} *</FLbl><input type="email" value={f.email} onChange={e => ff("email", e.target.value)} style={INP} /></div>
-      <div style={{ marginBottom: 11 }}><FLbl>{t.company}</FLbl><select value={f.company} onChange={e => ff("company", e.target.value)} style={INP}><option value="">{t.selectCo}</option>{DH_COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+      <div style={{ marginBottom: 11 }}><FLbl>{t.company}</FLbl><select value={f.company} onChange={e => ff("company", e.target.value)} style={INP}><option value="">{t.selectCo}</option>{COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
       <div style={{ marginBottom: 11 }}>
         <FLbl>{t.transferType}</FLbl>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -83,8 +83,8 @@ export function CreateEmpModal({ lang, t, onCreated, onClose }) {
         <div style={{ backgroundColor: C.amberL, border: `1px solid #fde68a`, borderRadius: 8, padding: 10, marginBottom: 11 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "#92400E", marginBottom: 8, textTransform: "uppercase" }}>Assignment</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <div style={{ flex: 1 }}><FLbl>{t.homeEnt}</FLbl><select value={f.homeEntity} onChange={e => ff("homeEntity", e.target.value)} style={INP}><option value="">{t.selectCo}</option>{DH_COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-            <div style={{ flex: 1 }}><FLbl>{t.hostEnt}</FLbl><select value={f.hostEntity} onChange={e => ff("hostEntity", e.target.value)} style={INP}><option value="">{t.selectCo}</option>{DH_COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+            <div style={{ flex: 1 }}><FLbl>{t.homeEnt}</FLbl><select value={f.homeEntity} onChange={e => ff("homeEntity", e.target.value)} style={INP}><option value="">{t.selectCo}</option>{COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+            <div style={{ flex: 1 }}><FLbl>{t.hostEnt}</FLbl><select value={f.hostEntity} onChange={e => ff("hostEntity", e.target.value)} style={INP}><option value="">{t.selectCo}</option>{COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
           </div>
         </div>
       )}

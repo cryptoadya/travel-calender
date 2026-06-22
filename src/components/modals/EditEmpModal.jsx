@@ -4,7 +4,7 @@ import { C } from '../../constants/colors';
 import { INP, FLbl, CountrySelect } from '../ui/Inputs';
 import { PBTN, SBTN } from '../ui/Buttons';
 import { transferLabel } from '../../utils/formatUtils';
-import { DH_COMPANIES, TRANSFER_TYPES } from '../../constants/config';
+import { COMPANIES, TRANSFER_TYPES } from '../../constants/config';
 
 import { db } from '../../lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -47,7 +47,7 @@ export function EditEmpModal({ emp, lang, t, onSaved, onClose }) {
         <div style={{ flex: 1 }}><FLbl>{t.firstName}</FLbl><input value={fn} onChange={e => setFn(e.target.value)} style={INP} /></div>
         <div style={{ flex: 1 }}><FLbl>{t.lastName}</FLbl><input value={ln} onChange={e => setLn(e.target.value)} style={INP} /></div>
       </div>
-      <div style={{ marginBottom: 11 }}><FLbl>{t.company}</FLbl><select value={co} onChange={e => setCo(e.target.value)} style={INP}><option value="">{t.selectCo}</option>{DH_COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+      <div style={{ marginBottom: 11 }}><FLbl>{t.company}</FLbl><select value={co} onChange={e => setCo(e.target.value)} style={INP}><option value="">{t.selectCo}</option>{COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
       <div style={{ marginBottom: 11 }}>
         <FLbl>{t.transferType}</FLbl>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -66,8 +66,8 @@ export function EditEmpModal({ emp, lang, t, onSaved, onClose }) {
         <div style={{ backgroundColor: C.amberL, border: `1px solid #fde68a`, borderRadius: 8, padding: 10, marginBottom: 11 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "#92400E", marginBottom: 8, textTransform: "uppercase" }}>Assignment</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <div style={{ flex: 1 }}><FLbl>{t.homeEnt}</FLbl><select value={hent} onChange={e => setHent(e.target.value)} style={INP}><option value="">{t.selectCo}</option>{DH_COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-            <div style={{ flex: 1 }}><FLbl>{t.hostEnt}</FLbl><select value={hsent} onChange={e => setHsent(e.target.value)} style={INP}><option value="">{t.selectCo}</option>{DH_COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+            <div style={{ flex: 1 }}><FLbl>{t.homeEnt}</FLbl><select value={hent} onChange={e => setHent(e.target.value)} style={INP}><option value="">{t.selectCo}</option>{COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+            <div style={{ flex: 1 }}><FLbl>{t.hostEnt}</FLbl><select value={hsent} onChange={e => setHsent(e.target.value)} style={INP}><option value="">{t.selectCo}</option>{COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
           </div>
         </div>
       )}
