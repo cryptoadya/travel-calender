@@ -1,8 +1,7 @@
 export const APP_VER = "9";
 export const ADM_CODE = import.meta.env?.VITE_ADMIN_CODE || "";
 
-export const DH_COMPANIES = [
-  "Delivery Hero",
+export const COMPANIES = [
   "Glovo",
   "foodora",
   "efood",

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { C } from '../constants/colors';
-import { DH_COMPANIES, AVAIL_YEARS, WORK_ACTS } from '../constants/config';
+import { COMPANIES, AVAIL_YEARS, WORK_ACTS } from '../constants/config';
 import { MO, MOS } from '../locales/translations';
 import { dk, dim } from '../utils/dateUtils';
 import { deriveMonthStatus, getMonthKey, getMissingDays, isMonthLockableByDate } from '../utils/monthStatus';
@@ -268,12 +268,12 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   };
 
   const groupByDH = empList => {
-    const g = {}; DH_COMPANIES.forEach(c => g[c] = []); g["__other"] = [];
-    empList.forEach(e => { const k = DH_COMPANIES.includes(e.company) ? e.company : "__other"; g[k].push(e); });
+    const g = {}; COMPANIES.forEach(c => g[c] = []); g["__other"] = [];
+    empList.forEach(e => { const k = COMPANIES.includes(e.company) ? e.company : "__other"; g[k].push(e); });
     return g;
   };
 
-  const getCompanyKey = emp => DH_COMPANIES.includes(emp.company) ? emp.company : "__other";
+  const getCompanyKey = emp => COMPANIES.includes(emp.company) ? emp.company : "__other";
   const employeeMatches = (emp, query) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
@@ -282,7 +282,7 @@ export function AdminDashboard({ lang, setLang, t, user, logout, viewEmp, setVie
   const filterEmployees = (list, companyFilter, employeeFilter) => list.filter(emp =>
     (!companyFilter || getCompanyKey(emp) === companyFilter) && employeeMatches(emp, employeeFilter)
   );
-  const companyOptions = DH_COMPANIES.concat(["__other"]);
+  const companyOptions = COMPANIES.concat(["__other"]);
   const companyLabel = co => co === "__other" ? t.otherCompany : co;
   const FilterBar = ({ companyValue, onCompanyChange, employeeValue, onEmployeeChange }) => (
     <Card style={{ marginBottom: 12, padding: 10 }}>

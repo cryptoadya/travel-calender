@@ -172,7 +172,7 @@ td{padding:5px 8px;border-bottom:1px solid #eee}
 </style></head>
 <body>
 <div class="hd">
-  <h1>Delivery Hero – ${escX(t.app)}</h1>
+  <h1>${escX(t.app)}</h1>
   <p>${escX(dName(emp))} | ${escX(fmtDate(fromDate, lang))} – ${escX(fmtDate(toDate, lang))}</p>
 </div>
 <div class="summary">
@@ -279,7 +279,7 @@ td{padding:5px 8px;border-bottom:1px solid #eee}
 </style></head>
 <body>
 <div class="hd">
-  <h1>Delivery Hero – ${escX(t.app)}</h1>
+  <h1>${escX(t.app)}</h1>
   <p>${escX(lang === "de" ? "Alle Mitarbeiter" : "All Employees")} | ${escX(fmtDate(fromDate, lang))} – ${escX(fmtDate(toDate, lang))}</p>
 </div>
 <div class="summary">

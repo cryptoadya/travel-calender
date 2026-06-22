@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { C } from '../constants/colors';
 import { APP_VER, ADM_CODE } from '../constants/config';
 import { valPw } from '../utils/authUtils';
-import { DHLogoLogin } from '../components/ui/Layout';
+import { AppLogoLogin } from '../components/ui/Layout';
 import { INP, FGRP, FLbl } from '../components/ui/Inputs';
 import { PBTN, SBTN, PWTOG, LINKGRAY, LINKRED } from '../components/ui/Buttons';
 import { ErrBox } from '../components/ui/Feedback';
@@ -105,7 +105,7 @@ export function AuthPage({ lang, setLang, t, notify, clearAll }) {
           </button>
         ))}
       </div>
-      <DHLogoLogin lang={lang} />
+      <AppLogoLogin lang={lang} />
       <div style={{ backgroundColor: C.white, borderRadius: 16, padding: 32, width: "100%", maxWidth: 520, boxShadow: "0 8px 32px rgba(0,0,0,0.1)" }}>
         {authMode === "login" && (
           <>
